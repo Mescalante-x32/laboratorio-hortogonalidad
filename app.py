@@ -2,6 +2,7 @@ import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import square, sawtooth
+import pandas as pd
 
 # --- Configuración Global ---
 st.set_page_config(page_title="Laboratorio Dr. Escalante", layout="wide")
@@ -16,12 +17,16 @@ tema = st.sidebar.radio(
 st.sidebar.markdown("---")
 st.sidebar.info("Desarrollado para el curso de Electrónica de Potencia Aplicada.")
 
+# Función auxiliar para preparar la descarga en CSV
+def convertir_a_csv(t, y):
+    df = pd.DataFrame({'Tiempo_s': t, 'Amplitud_V': y})
+    return df.to_csv(index=False).encode('utf-8')
+
 # ==========================================
 # MÓDULO 1: ORTOGONALIDAD
 # ==========================================
 if tema == "1. Ortogonalidad de Señales":
     st.header("Módulo 1: Análisis de Ortogonalidad en CA")
-    st.write("Estudie cómo interactúan dos señales de diferentes frecuencias en el cálculo de potencia.")
     
     col_ctrl, col_graph = st.columns([1, 3])
     
@@ -39,30 +44,23 @@ if tema == "1. Ortogonalidad de Señales":
     fig, ax = plt.subplots(2, 1, figsize=(10, 7))
     ax[0].plot(t, v, label="v(t)")
     ax[0].plot(t, i, label="i(t)", linestyle="--")
-    ax[0].legend()
-    ax[0].grid(True)
+    ax[0].legend(); ax[0].grid(True)
     
     ax[1].plot(t, p, color="black", label="p(t)")
     ax[1].fill_between(t, p, 0, where=(p>=0), color='green', alpha=0.3)
     ax[1].fill_between(t, p, 0, where=(p<0), color='orange', alpha=0.3)
-    ax[1].axhline(p_avg, color='purple', linewidth=2, label=f'Potencia Promedio = {p_avg:.4f}')
-    ax[1].legend()
-    ax[1].grid(True)
+    ax[1].axhline(p_avg, color='purple', linewidth=2, label=f'P_prom = {p_avg:.4f}')
+    ax[1].legend(); ax[1].grid(True)
     
     with col_graph:
         st.pyplot(fig)
-        if np.isclose(p_avg, 0, atol=1e-4):
-            st.success("Señales Ortogonales: La potencia neta es cero.")
-        else:
-            st.warning("Señales No Ortogonales: Existe flujo de potencia activa.")
-    # Crear un archivo CSV con los datos de tiempo y amplitud
-    datos = np.column_stack((t, y))
-    st.download_button(
-        label="Descargar datos de la simulación (.csv)",
-        data=datos.tobytes(),
-        file_name='simulacion_potencia.csv',
-        mime='text/csv'
-    )
+        csv = convertir_a_csv(t, p)
+        st.download_button(
+            label="📥 Descargar Datos de Potencia (CSV)",
+            data=csv,
+            file_name='datos_ortogonalidad.csv',
+            mime='text/csv',
+        )
 
 # ==========================================
 # MÓDULO 2: VALORES RMS Y PROMEDIO
@@ -98,6 +96,13 @@ elif tema == "2. Valores RMS y Promedio":
     ax2.plot(t, y, color='black', linewidth=2)
     ax2.axhline(v_prom, color='blue', linestyle='--', label='V_prom')
     ax2.axhline(v_rms, color='red', linestyle='-.', label='V_rms')
-    ax2.legend()
-    ax2.grid(True)
+    ax2.legend(); ax2.grid(True)
     st.pyplot(fig2)
+    
+    csv_rms = convertir_a_csv(t, y)
+    st.download_button(
+        label="📥 Descargar Datos de Onda (CSV)",
+        data=csv_rms,
+        file_name='datos_onda_rms.csv',
+        mime='text/csv',
+    )
