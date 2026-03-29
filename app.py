@@ -17,7 +17,8 @@ tema = st.sidebar.radio(
         "3. Evaluación de Conceptos",
         "4. Circuitos RC y RL (Transitorios)",
         "5. Circuitos CA (Carga R-L)",
-        "6. Corrección del Factor de Potencia"
+        "6. Corrección del Factor de Potencia",
+        "7. Parámetros No Sinusoidales"
     )
 )
 
@@ -306,3 +307,89 @@ elif tema == "6. Corrección del Factor de Potencia":
         'I_Carga [A]': [I_L], 'I_Fuente_Compensada [A]': [I_fuente], 'P [W]': [P_L], 'Q_Neto [VAR]': [Q_total]
     }
     st.download_button("📥 Descargar Reporte de Compensación", preparar_descarga(datos_m6), "compensacion_fp.csv")
+
+# ==========================================
+# MÓDULO 7: PARÁMETROS NO SINUSOIDALES
+# ==========================================
+elif tema == "7. Parámetros No Sinusoidales":
+    st.header("Módulo 7: Análisis bajo Condiciones No Sinusoidales")
+    st.write("Estudio de distorsión armónica y potencias en sistemas no lineales.")
+
+    with st.sidebar:
+        st.subheader("Configuración de Señal")
+        V_rms_7 = st.number_input("Voltaje Fuente (Sinusoidal) [Vrms]", value=120.0)
+        I1_rms = st.number_input("Corriente Fundamental [Arms]", value=10.0)
+        
+        st.markdown("---")
+        st.subheader("Contenido Armónico (Corriente)")
+        h3 = st.slider("3er Armónico (%)", 0, 100, 30) / 100
+        h5 = st.slider("5to Armónico (%)", 0, 100, 20) / 100
+        h7 = st.slider("7mo Armónico (%)", 0, 100, 10) / 100
+        phi1_deg = st.slider("Desfase Fundamental (grados)", -90, 90, 30)
+
+    # --- Cálculos de Potencia y Distorsión ---
+    phi1_rad = np.radians(phi1_deg)
+    
+    # Componentes de corriente
+    I3_rms = I1_rms * h3
+    I5_rms = I1_rms * h5
+    I7_rms = I1_rms * h7
+    
+    # Corriente RMS Total: sqrt(I1^2 + I3^2 + I5^2 + ...)
+    I_total_rms = np.sqrt(I1_rms**2 + I3_rms**2 + I5_rms**2 + I7_rms**2)
+    
+    # THD de Corriente
+    THD_i = np.sqrt(I3_rms**2 + I5_rms**2 + I7_rms**2) / I1_rms
+    
+    # Potencias
+    P_7 = V_rms_7 * I1_rms * np.cos(phi1_rad)  # Solo la fundamental entrega P si V es pura
+    S_7 = V_rms_7 * I_total_rms
+    Q_7 = V_rms_7 * I1_rms * np.sin(phi1_rad)
+    D_7 = np.sqrt(S_7**2 - P_7**2 - Q_7**2)    # Potencia de Distorsión
+    
+    # Factores de Potencia
+    FP_desplazamiento = np.cos(phi1_rad)       # DPF
+    FP_verdadero = P_7 / S_7                   # True PF
+    
+    # --- Interfaz de Resultados ---
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Corriente RMS Total", f"{I_total_rms:.2f} A")
+    c2.metric("THD Corriente", f"{THD_i*100:.1f} %")
+    c3.metric("Factor de Distorsión", f"{1/np.sqrt(1 + THD_i**2):.3f}")
+
+    c4, c5, c6 = st.columns(3)
+    c4.metric("FP Desplazamiento (DPF)", f"{FP_desplazamiento:.3f}")
+    c5.metric("FP Verdadero (PF)", f"{FP_verdadero:.3f}")
+    c6.metric("Potencia Distorsión (D)", f"{D_7:.1f} VA")
+
+    # --- Gráficas ---
+    t = np.linspace(0, 2/60, 1000)
+    w = 2 * np.pi * 60
+    
+    v_t = V_rms_7 * np.sqrt(2) * np.sin(w * t)
+    i1_t = I1_rms * np.sqrt(2) * np.sin(w * t - phi1_rad)
+    i3_t = I3_rms * np.sqrt(2) * np.sin(3 * w * t)
+    i5_t = I5_rms * np.sqrt(2) * np.sin(5 * w * t)
+    i7_t = I7_rms * np.sqrt(2) * np.sin(7 * w * t)
+    i_total_t = i1_t + i3_t + i5_t + i7_t
+
+    st.subheader("Visualización de Ondas y Espectro")
+    col_g1, col_g2 = st.columns(2)
+    
+    with col_g1:
+        fig8, ax8 = plt.subplots()
+        ax8.plot(t*1000, v_t/V_rms_7, 'b', alpha=0.3, label="v(t) normalizada")
+        ax8.plot(t*1000, i_total_t, 'r', lw=2, label="i_total(t) Distorsionada")
+        ax8.set_title("Señales en el Tiempo"); ax8.grid(True); ax8.legend()
+        st.pyplot(fig8)
+
+    with col_g2:
+        # Gráfica de barras para el espectro
+        armonicos = ['Fundamental', '3ero', '5to', '7mo']
+        valores = [I1_rms, I3_rms, I5_rms, I7_rms]
+        fig9, ax9 = plt.subplots()
+        ax9.bar(armonicos, valores, color='orange')
+        ax9.set_title("Espectro de Amplitud (RMS)"); ax9.set_ylabel("Corriente [A]")
+        st.pyplot(fig9)
+
+    st.warning(f"**Observación Pedagógica:** El Factor de Potencia Verdadero ({FP_verdadero:.3f}) es menor al de Desplazamiento ({FP_desplazamiento:.3f}) debido a la presencia de armónicos. La diferencia se explica por la Potencia de Distorsión D = {D_7:.1f} VA.")
