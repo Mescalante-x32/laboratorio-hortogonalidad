@@ -18,7 +18,8 @@ tema = st.sidebar.radio(
         "4. Circuitos RC y RL (Transitorios)",
         "5. Circuitos CA (Carga R-L)",
         "6. Corrección del Factor de Potencia",
-        "7. Parámetros No Sinusoidales"
+        "7. Parámetros No Sinusoidales",
+        "8. Autoevaluación de CA y Armónicos"
     )
 )
 
@@ -393,3 +394,113 @@ elif tema == "7. Parámetros No Sinusoidales":
         'P [W]': [P_7]*1000, 'Q [VAR]': [Q_7]*1000, 'S [VA]': [S_7]*1000, 'D [VAD]': [D_7]*1000
     }
     st.download_button("📥 Descargar Reporte Armónico", preparar_descarga(datos_m7), "analisis_armonico.csv")
+
+# ==========================================
+# MÓDULO 8: AUTOEVALUACIÓN DE CA Y ARMÓNICOS
+# ==========================================
+elif tema == "8. Autoevaluación de CA y Armónicos":
+    st.header("📝 Examen de Afianzamiento: Circuitos en CA")
+    st.write("Mida su comprensión sobre los conceptos de los Módulos 5, 6 y 7.")
+
+    with st.form("examen_ca"):
+        # --- Pregunta 1 ---
+        st.subheader("1. Impedancia R-L")
+        q1 = st.radio(
+            "En un circuito R-L serie, si la frecuencia de la fuente aumenta, ¿qué sucede con la magnitud de la impedancia total |Z|?",
+            ("Disminuye", "Se mantiene igual", "Aumenta", "Se vuelve cero")
+        )
+
+        # --- Pregunta 2 ---
+        st.subheader("2. Desfase V-I")
+        q2 = st.radio(
+            "En una carga inductiva pura, ¿cuál es la relación de fase entre voltaje y corriente?",
+            ("La corriente adelanta al voltaje 90°", "El voltaje adelanta a la corriente 90°", "Están en fase", "El voltaje adelanta 180°")
+        )
+
+        # --- Pregunta 3 ---
+        st.subheader("3. Factor de Potencia (FP)")
+        q3 = st.radio(
+            "Un factor de potencia de 0.7 en atraso indica que la carga es predominantemente:",
+            ("Capacitiva", "Resistiva pura", "Inductiva", "No lineal")
+        )
+
+        # --- Pregunta 4 ---
+        st.subheader("4. Compensación de FP")
+        q4 = st.radio(
+            "Al colocar un capacitor en paralelo con una carga R-L, ¿qué componente de la potencia se reduce desde la perspectiva de la fuente?",
+            ("Potencia Activa (P)", "Potencia Reactiva (Q)", "Ambas (P y Q)", "Ninguna")
+        )
+
+        # --- Pregunta 5 ---
+        st.subheader("5. Potencia Activa en Armónicos")
+        q5 = st.radio(
+            "Si el voltaje es una senoidal pura de 60Hz y la corriente tiene un 3er armónico (180Hz), ¿cuánta potencia activa produce ese 3er armónico?",
+            ("Proporcional a su amplitud", "El triple que la fundamental", "Cero", "Depende del valor eficaz")
+        )
+
+        # --- Pregunta 6 ---
+        st.subheader("6. Potencia de Distorsión (D)")
+        q6 = st.radio(
+            "¿En qué condición aparece el término de Potencia de Distorsión (D) en el balance de potencias?",
+            ("Siempre que hay inductores", "Solo cuando hay capacitores", "Cuando existen armónicos en V o I", "En circuitos de CD")
+        )
+
+        # --- Pregunta 7 ---
+        st.subheader("7. THD y Factor de Potencia")
+        q7 = st.radio(
+            "Si el THD de corriente aumenta pero el desfase de la fundamental se mantiene igual, el Factor de Potencia Verdadero:",
+            ("Aumenta", "Disminuye", "Se mantiene igual", "No se puede determinar")
+        )
+
+        # --- Pregunta 8 ---
+        st.subheader("8. Cálculo de RMS")
+        q8 = st.radio(
+            "Si una corriente tiene una fundamental de 10A (RMS) y un 3er armónico de 10A (RMS), ¿cuál es el valor RMS total?",
+            ("20 A", "10 A", "14.14 A (sqrt(10^2 + 10^2))", "0 A")
+        )
+
+        # --- Pregunta 9 ---
+        st.subheader("9. Triángulo de Potencias")
+        q9 = st.radio(
+            "¿Qué representa la hipotenusa en el triángulo de potencias clásico (sin armónicos)?",
+            ("Potencia Activa (P)", "Potencia Reactiva (Q)", "Potencia Aparente (S)", "Factor de Potencia")
+        )
+
+        # --- Pregunta 10 ---
+        st.subheader("10. Efecto de la Compensación en la Corriente")
+        q10 = st.radio(
+            "¿Por qué es deseable corregir el Factor de Potencia en una planta industrial?",
+            ("Para aumentar el consumo de Watts", "Para reducir la corriente total y las pérdidas en conductores", "Para aumentar el voltaje de red", "Para eliminar los armónicos")
+        )
+
+        # Botón de envío
+        enviado = st.form_submit_button("Finalizar y Calificar")
+
+        if enviado:
+            aciertos = 0
+            respuestas = [
+                (q1, "Aumenta", "XL = 2*pi*f*L, si f sube, XL sube."),
+                (q2, "El voltaje adelanta a la corriente 90°", "ELI the ICE man: en L (Inductor), E (Voltaje) adelanta a I."),
+                (q3, "Inductiva", "'Atraso' siempre refiere a que la corriente se queda atrás del voltaje."),
+                (q4, "Potencia Reactiva (Q)", "El capacitor suministra los VARs que la bobina necesita."),
+                (q5, "Cero", "La ortogonalidad indica que frecuencias distintas no producen potencia neta."),
+                (q6, "Cuando existen armónicos en V o I", "D surge de la distorsión no lineal."),
+                (q7, "Disminuye", "PF = (I1/Irms) * DPF. Si THD sube, Irms sube y PF baja."),
+                (q8, "14.14 A (sqrt(10^2 + 10^2))", "Uso del teorema de Parseval para valores RMS."),
+                (q9, "Potencia Aparente (S)", "S = sqrt(P^2 + Q^2)."),
+                (q10, "Para reducir la corriente total y las pérdidas en conductores", "Menos corriente significa conductores más delgados y menos multas.")
+            ]
+
+            st.markdown("---")
+            for i, (resp, correcta, explicacion) in enumerate(respuestas):
+                if resp == correcta:
+                    st.success(f"Pregunta {i+1}: Correcto. {explicacion}")
+                    aciertos += 1
+                else:
+                    st.error(f"Pregunta {i+1}: Incorrecto. La respuesta era '{correcta}'. {explicacion}")
+            
+            puntuacion = (aciertos / 10) * 100
+            st.metric("Tu Calificación Final", f"{puntuacion}%")
+            if aciertos >= 8:
+                st.balloons()
+                st.write("¡Excelente dominio de CA!")
