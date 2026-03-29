@@ -16,7 +16,7 @@ tema = st.sidebar.radio(
         "2. Valores RMS y Promedio", 
         "3. Evaluación de Conceptos",
         "4. Circuitos RC y RL (Transitorios)"
-        "5. Análisis en estado estacionario de circuitos de CA"
+        "5. Circuitos CA (Carga R-L)"
     )
 )
 
