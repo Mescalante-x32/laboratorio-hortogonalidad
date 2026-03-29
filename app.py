@@ -16,6 +16,7 @@ tema = st.sidebar.radio(
         "2. Valores RMS y Promedio", 
         "3. Evaluación de Conceptos",
         "4. Circuitos RC y RL (Transitorios)"
+        "5. Análisis en estado estacionario de circuitos de CA"
     )
 )
 
@@ -147,3 +148,80 @@ elif tema == "4. Circuitos RC y RL (Transitorios)":
             '% del Final': ['63.2%', '86.5%', '95.0%', '98.2%', '99.3%']
         })
         st.table(df_claves)
+
+# ==========================================
+# MÓDULO 5: CIRCUITOS CA (CARGA R-L)
+# ==========================================
+elif tema == "5. Circuitos CA (Carga R-L)":
+    st.header("Módulo 5: Análisis de Circuitos CA en Carga Serie R-L")
+    st.write("Análisis de voltajes, corrientes y potencias en régimen permanente.")
+
+    with st.sidebar:
+        st.subheader("Parámetros del Circuito")
+        V_rms = st.number_input("Voltaje de Fuente (Vrms)", value=120.0, step=10.0)
+        f = st.number_input("Frecuencia (Hz)", value=60.0, step=1.0)
+        R = st.number_input("Resistencia R [Ω]", value=10.0, min_value=0.1)
+        L_mH = st.number_input("Inductancia L [mH]", value=20.0, min_value=0.1)
+
+    # --- Cálculos Eléctricos ---
+    L = L_mH / 1000
+    w = 2 * np.pi * f
+    XL = w * L
+    Z_mag = np.sqrt(R**2 + XL**2)
+    phi_rad = np.arctan2(XL, R)
+    phi_deg = np.degrees(phi_rad)
+    
+    # Valores de Corriente y Potencia
+    I_rms = V_rms / Z_mag
+    S = V_rms * I_rms         # Potencia Aparente [VA]
+    P = S * np.cos(phi_rad)    # Potencia Activa [W]
+    Q = S * np.sin(phi_rad)    # Potencia Reactiva [VAR]
+    FP = np.cos(phi_rad)       # Factor de Potencia
+    
+    # --- Métricas de Resultados ---
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Impedancia |Z|", f"{Z_mag:.2f} Ω")
+    c2.metric("Ángulo φ", f"{phi_deg:.1f}°")
+    c3.metric("I rms", f"{I_rms:.2f} A")
+    c4.metric("Factor de Potencia", f"{FP:.3f}")
+
+    c5, c6, c7 = st.columns(3)
+    c5.metric("Potencia Activa (P)", f"{P:.1f} W")
+    c6.metric("Potencia Reactiva (Q)", f"{Q:.1f} VAR")
+    c7.metric("Potencia Aparente (S)", f"{S:.1f} VA")
+
+    # --- Generación de Gráficas ---
+    t = np.linspace(0, 2/f, 1000) # 2 ciclos
+    V_pico = V_rms * np.sqrt(2)
+    I_pico = I_rms * np.sqrt(2)
+    
+    v_t = V_pico * np.sin(w * t)
+    i_t = I_pico * np.sin(w * t - phi_rad)
+    
+    # Voltajes en componentes
+    vr_t = i_t * R
+    vl_t = I_pico * XL * np.sin(w * t - phi_rad + np.pi/2)
+
+    st.subheader("Formas de Onda Instantáneas")
+    fig5, ax5 = plt.subplots(figsize=(10, 5))
+    ax5.plot(t*1000, v_t, 'b', label="v(t) Fuente", lw=2)
+    ax5.plot(t*1000, i_t * (V_pico/I_pico * 0.5), 'r--', label="i(t) (Escalada)")
+    ax5.plot(t*1000, vl_t, 'g:', label="v_L(t) Inductor")
+    ax5.set_xlabel("Tiempo [ms]"); ax5.set_ylabel("Amplitud"); ax5.legend(); ax5.grid(True)
+    st.pyplot(fig5)
+
+    # --- Triángulo de Potencias (Visualización Pedagógica) ---
+    st.subheader("Triángulo de Potencias")
+    fig6, ax6 = plt.subplots(figsize=(4, 4))
+    ax6.quiver(0, 0, P, 0, angles='xy', scale_units='xy', scale=1, color='b', label='P (W)')
+    ax6.quiver(P, 0, 0, Q, angles='xy', scale_units='xy', scale=1, color='g', label='Q (VAR)')
+    ax6.quiver(0, 0, P, Q, angles='xy', scale_units='xy', scale=1, color='r', label='S (VA)')
+    ax6.set_xlim(0, S*1.1); ax6.set_ylim(0, S*1.1); ax6.grid(True); ax6.legend()
+    st.pyplot(fig6)
+
+    # --- Descarga de Datos ---
+    datos_m5 = {
+        'Tiempo [s]': t, 'v_fuente [V]': v_t, 'i_total [A]': i_t, 
+        'v_resistencia [V]': vr_t, 'v_inductor [V]': vl_t
+    }
+    st.download_button("📥 Descargar Datos CA", preparar_descarga(datos_m5), "circuito_ca_rl.csv")
