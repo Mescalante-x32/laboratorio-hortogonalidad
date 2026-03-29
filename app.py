@@ -15,7 +15,7 @@ tema = st.sidebar.radio(
         "1. Ortogonalidad de Señales", 
         "2. Valores RMS y Promedio", 
         "3. Evaluación de Conceptos",
-        "4. Circuitos RC y RL (Transitorios)"
+        "4. Circuitos RC y RL (Transitorios)",
         "5. Circuitos CA (Carga R-L)"
     )
 )
