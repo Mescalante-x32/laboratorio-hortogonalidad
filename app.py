@@ -16,7 +16,8 @@ tema = st.sidebar.radio(
         "2. Valores RMS y Promedio", 
         "3. Evaluación de Conceptos",
         "4. Circuitos RC y RL (Transitorios)",
-        "5. Circuitos CA (Carga R-L)"
+        "5. Circuitos CA (Carga R-L)",
+        "6. Corrección del Factor de Potencia"
     )
 )
 
@@ -225,3 +226,83 @@ elif tema == "5. Circuitos CA (Carga R-L)":
         'v_resistencia [V]': vr_t, 'v_inductor [V]': vl_t
     }
     st.download_button("📥 Descargar Datos CA", preparar_descarga(datos_m5), "circuito_ca_rl.csv")
+
+# ==========================================
+# MÓDULO 6: CORRECCIÓN DEL FACTOR DE POTENCIA
+# ==========================================
+elif tema == "6. Corrección del Factor de Potencia":
+    st.header("Módulo 6: Corrección del Factor de Potencia (Carga R-L + C paralelo)")
+    st.write("Simulación de compensación de potencia reactiva mediante capacitores en paralelo.")
+
+    with st.sidebar:
+        st.subheader("Carga Original (R-L)")
+        V_rms_6 = st.number_input("Voltaje Fuente [Vrms]", value=120.0, key="v6")
+        f_6 = st.number_input("Frecuencia [Hz]", value=60.0, key="f6")
+        R_6 = st.number_input("Resistencia R [Ω]", value=20.0, min_value=0.1, key="r6")
+        L_6_mH = st.number_input("Inductancia L [mH]", value=100.0, min_value=0.1, key="l6")
+        
+        st.subheader("Compensación")
+        C_comp_uF = st.slider("Capacitancia de Compensación [µF]", 0.0, 500.0, 0.0, step=10.0)
+
+    # --- Cálculos Carga Original ---
+    w6 = 2 * np.pi * f_6
+    XL_6 = w6 * (L_6_mH / 1000)
+    Z_L = complex(R_6, XL_6)
+    I_L = V_rms_6 / abs(Z_L)
+    
+    P_L = (I_L**2) * R_6
+    Q_L = (I_L**2) * XL_6
+    phi_original = np.arctan2(Q_L, P_L)
+    FP_original = np.cos(phi_original)
+
+    # --- Cálculos Compensación ---
+    XC_6 = 1 / (w6 * (C_comp_uF * 1e-6)) if C_comp_uF > 0 else float('inf')
+    Q_C = (V_rms_6**2) / XC_6 if C_comp_uF > 0 else 0
+    
+    Q_total = Q_L - Q_C
+    S_total = np.sqrt(P_L**2 + Q_total**2)
+    I_fuente = S_total / V_rms_6
+    phi_nuevo = np.arctan2(Q_total, P_L)
+    FP_nuevo = np.cos(phi_nuevo)
+
+    # --- Interfaz de Resultados ---
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.subheader("Estado Original")
+        st.metric("FP Inicial", f"{FP_original:.3f}")
+        st.metric("Corriente Total", f"{I_L:.2f} A")
+        st.metric("Q Original", f"{Q_L:.1f} VAR")
+    
+    with col_b:
+        st.subheader("Estado Compensado")
+        st.metric("FP Final", f"{FP_nuevo:.3f}", delta=f"{FP_nuevo-FP_original:.3f}")
+        st.metric("Corriente Fuente", f"{I_fuente:.2f} A", delta=f"{I_fuente-I_L:.2f}", delta_color="inverse")
+        st.metric("Q Neto", f"{Q_total:.1f} VAR")
+
+    # --- Gráfica de Fasores de Corriente ---
+    st.subheader("Diagrama Fasorial de Corrientes")
+    # Fasores: I_L (atraso), I_C (adelanto 90°), I_fuente (suma)
+    i_l_complex = I_L * np.exp(-1j * phi_original)
+    i_c_complex = (V_rms_6 / XC_6) * 1j if C_comp_uF > 0 else 0j
+    i_total_complex = i_l_complex + i_c_complex
+
+    fig7, ax7 = plt.subplots(figsize=(6, 6))
+    ax7.quiver(0, 0, i_l_complex.real, i_l_complex.imag, angles='xy', scale_units='xy', scale=1, color='red', label='I_carga (R-L)')
+    if C_comp_uF > 0:
+        ax7.quiver(i_l_complex.real, i_l_complex.imag, i_c_complex.real, i_c_complex.imag, angles='xy', scale_units='xy', scale=1, color='blue', label='I_capacitor')
+    ax7.quiver(0, 0, i_total_complex.real, i_total_complex.imag, angles='xy', scale_units='xy', scale=1, color='black', lw=2, label='I_fuente (Total)')
+    
+    limit = max(I_L, I_fuente) * 1.2
+    ax7.set_xlim(-limit/4, limit); ax7.set_ylim(-limit, limit/4)
+    ax7.axhline(0, color='gray', lw=1); ax7.axvline(0, color='gray', lw=1)
+    ax7.grid(True, linestyle='--'); ax7.legend(); ax7.set_title("Compensación de Corriente")
+    st.pyplot(fig7)
+
+    st.info(f"👉 **Efecto:** Al agregar {C_comp_uF} µF, la corriente que la fuente debe suministrar bajó de {I_L:.2f}A a {I_fuente:.2f}A.")
+
+    # --- Descarga de Datos ---
+    datos_m6 = {
+        'Capacitancia [uF]': [C_comp_uF], 'FP_Original': [FP_original], 'FP_Nuevo': [FP_nuevo],
+        'I_Carga [A]': [I_L], 'I_Fuente_Compensada [A]': [I_fuente], 'P [W]': [P_L], 'Q_Neto [VAR]': [Q_total]
+    }
+    st.download_button("📥 Descargar Reporte de Compensación", preparar_descarga(datos_m6), "compensacion_fp.csv")
