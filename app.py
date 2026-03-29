@@ -17,10 +17,15 @@ tema = st.sidebar.radio(
 st.sidebar.markdown("---")
 st.sidebar.info("Desarrollado para el curso de Electrónica de Potencia Aplicada.")
 
-# Función auxiliar para preparar la descarga en CSV
-def convertir_a_csv(t, y):
-    df = pd.DataFrame({'Tiempo_s': t, 'Amplitud_V': y})
-    return df.to_csv(index=False).encode('utf-8')
+# --- NUEVA FUNCIÓN DE DESCARGA FLEXIBLE ---
+def preparar_descarga(dict_datos):
+    """
+    Recibe un diccionario donde las llaves son los nombres de las columnas
+    y los valores son los arreglos de datos (numpy arrays).
+    """
+    df = pd.DataFrame(dict_datos)
+    # 'utf-8-sig' permite que Excel reconozca el formato inmediatamente
+    return df.to_csv(index=False).encode('utf-8-sig')
 
 # ==========================================
 # MÓDULO 1: ORTOGONALIDAD
@@ -54,11 +59,20 @@ if tema == "1. Ortogonalidad de Señales":
     
     with col_graph:
         st.pyplot(fig)
-        csv = convertir_a_csv(t, p)
+        
+        # PREPARAR TODAS LAS COLUMNAS PARA EL MÓDULO 1
+        datos_m1 = {
+            'Tiempo [s]': t,
+            'Voltaje [V]': v,
+            'Corriente [A]': i,
+            'Potencia_Instantanea [W]': p
+        }
+        csv_m1 = preparar_descarga(datos_m1)
+        
         st.download_button(
-            label="📥 Descargar Datos de Potencia (CSV)",
-            data=csv,
-            file_name='datos_ortogonalidad.csv',
+            label="📥 Descargar Laboratorio Completo (v, i, p) en CSV",
+            data=csv_m1,
+            file_name='analisis_ortogonalidad_completo.csv',
             mime='text/csv',
         )
 
@@ -94,15 +108,24 @@ elif tema == "2. Valores RMS y Promedio":
     
     fig2, ax2 = plt.subplots(figsize=(10, 4))
     ax2.plot(t, y, color='black', linewidth=2)
-    ax2.axhline(v_prom, color='blue', linestyle='--', label='V_prom')
-    ax2.axhline(v_rms, color='red', linestyle='-.', label='V_rms')
+    ax2.axhline(v_prom, color='blue', linestyle='--', label=f'V_dc = {v_prom:.2f}')
+    ax2.axhline(v_rms, color='red', linestyle='-.', label=f'V_rms = {v_rms:.2f}')
     ax2.legend(); ax2.grid(True)
     st.pyplot(fig2)
     
-    csv_rms = convertir_a_csv(t, y)
+    # PREPARAR DATOS PARA EL MÓDULO 2
+    # Aquí incluimos la señal y los valores calculados como columnas constantes para referencia
+    datos_m2 = {
+        'Tiempo [s]': t,
+        'Amplitud_Onda [V]': y,
+        'Referencia_DC [V]': np.full_like(t, v_prom),
+        'Referencia_RMS [V]': np.full_like(t, v_rms)
+    }
+    csv_m2 = preparar_descarga(datos_m2)
+    
     st.download_button(
-        label="📥 Descargar Datos de Onda (CSV)",
-        data=csv_rms,
-        file_name='datos_onda_rms.csv',
+        label=f"📥 Descargar Datos de {tipo_onda} (CSV)",
+        data=csv_m2,
+        file_name=f'analisis_{tipo_onda.lower()}.csv',
         mime='text/csv',
     )
