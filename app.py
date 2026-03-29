@@ -55,6 +55,14 @@ if tema == "1. Ortogonalidad de Señales":
             st.success("Señales Ortogonales: La potencia neta es cero.")
         else:
             st.warning("Señales No Ortogonales: Existe flujo de potencia activa.")
+# Crear un archivo CSV con los datos de tiempo y amplitud
+datos = np.column_stack((t, y))
+st.download_button(
+    label="Descargar datos de la simulación (.csv)",
+    data=datos.tobytes(),
+    file_name='simulacion_potencia.csv',
+    mime='text/csv'
+)
 
 # ==========================================
 # MÓDULO 2: VALORES RMS Y PROMEDIO
