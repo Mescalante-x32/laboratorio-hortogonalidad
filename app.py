@@ -2,7 +2,7 @@ import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
 
-st.title("Laboratorio de Ortogonalidad en CA")
+st.title("Ortogonalidad y Potencia Promedio en CA")
 st.write("Mueve los deslizadores para ver cómo interactúan las frecuencias.")
 
 # Sliders en la barra lateral
