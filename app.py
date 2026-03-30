@@ -1101,3 +1101,28 @@ elif tema == "15. Autoevaluación: Rectificadores":
         st.markdown("---")
 
     st.info("💡 **Consejo:** Puede regresar a los módulos de simulación para cambiar los parámetros y observar estos fenómenos gráficamente antes de responder.")
+    # --- Formulario Técnico ---
+    st.subheader("📓 Formulario: Rectificadores No Controlados")
+    
+    with st.expander("Ver Fórmulas y Definiciones"):
+        st.markdown(r"""
+        ### 1. Parámetros de Desempeño Generales
+        * **Valor Promedio (CD):** $V_{dc} = \frac{1}{T} \int_{0}^{T} v(t) dt$
+        * **Valor Eficaz (RMS):** $V_{rms} = \sqrt{\frac{1}{T} \int_{0}^{T} v^2(t) dt}$
+        * **Factor de Rizado (RF):** $RF = \frac{V_{ac}}{V_{dc}} \times 100\% = \frac{\sqrt{V_{rms}^2 - V_{dc}^2}}{V_{dc}} \times 100\%$
+        
+        ### 2. Onda Completa con Filtro Capacitivo ($C$)
+        * **Voltaje de Rizado aproximado ($\Delta V$):** $\Delta V \approx \frac{V_m}{2 \cdot f \cdot R \cdot C}$
+        * **Voltaje CD Promedio:** $V_{dc} \approx V_m - \frac{\Delta V}{2}$
+        
+        ### 3. Filtro $L-C$ (Conducción Continua)
+        * **Inductancia Crítica ($L_c$):** $L_c \geq \frac{R}{3\omega} = \frac{R}{6\pi f}$
+        * **Voltaje CD Promedio:** $V_{dc} = \frac{2 V_m}{\pi}$ (Ideal, despreciando caídas en $L$)
+        * **Factor de Rizado:** $RF \approx \frac{\sqrt{2}}{3 (4 \omega^2 L C - 1)}$
+        
+        ### 4. Efecto de la Inductancia de Línea ($L_s$)
+        * **Caída de Voltaje por Conmutación ($\Delta V_{comm}$):** $\Delta V_{comm} = \frac{2 \omega L_s I_{dc}}{\pi}$ (para monofásico)
+        * **Voltaje de Salida Real:** $V_{dc} = \frac{2 V_m}{\pi} - \frac{2 f L_s I_{dc}}{1}$ 
+        """)
+
+    st.markdown("---")
