@@ -740,81 +740,77 @@ elif tema == "11. Efecto de Inductancia de Línea":
 
     st.info(f"👉 **Análisis:** Al considerar la carga como una fuente de corriente constante **Id**, el ángulo de conmutación **u** representa el tiempo que tarda la corriente de línea en subir desde 0 hasta el valor de la carga. Durante este tiempo (**{u_deg:.1f}°**), el voltaje en la carga es cero, lo que reduce el voltaje promedio final.")
 
-# ==========================================
-# MÓDULO 12: ONDA COMPLETA (FILTRO C + Ls)
-# ==========================================
+# =========================================================
+# MÓDULO 12 CORREGIDO: ONDA COMPLETA (SIN OSCILACIONES)
+# =========================================================
 elif tema == "12. Onda Completa con Filtro C y Ls":
-    st.header("Módulo 12: Rectificador de Onda Completa con Filtro C e Inductancia de Línea")
-    st.write("Análisis del rizado de voltaje y el efecto de la inductancia de fuente en la carga del capacitor.")
+    st.header("Módulo 12: Rectificador de Onda Completa (Filtro C + Ls)")
+    st.write("Análisis realista del rizado y pulsos de corriente de entrada.")
 
     with st.sidebar:
         st.subheader("Parámetros del Circuito")
-        Vm_12 = st.number_input("Voltaje Pico Fuente [V]", value=170.0, key="vm12")
-        f_12 = st.number_input("Frecuencia [Hz]", value=60.0, key="f12")
-        Ls_mH_12 = st.slider("Inductancia de Línea Ls [mH]", 0.001, 10.0, 1.0, step=0.01)
-        C_uF_12 = st.number_input("Capacitor de Filtro [µF]", value=470.0, step=50.0)
-        R_12 = st.number_input("Resistencia de Carga [Ω]", value=100.0, min_value=1.0)
+        Vm_12 = st.number_input("Voltaje Pico Fuente [V]", value=170.0)
+        f_12 = st.number_input("Frecuencia [Hz]", value=60.0)
+        Ls_mH_12 = st.slider("Inductancia de Línea Ls [mH]", 0.1, 10.0, 1.0, step=0.1)
+        C_uF_12 = st.number_input("Capacitor de Filtro [µF]", value=1000.0, step=100.0)
+        R_12 = st.number_input("Resistencia de Carga [Ω]", value=50.0, min_value=1.0)
 
-    # --- Cálculos y Simulación ---
-    w12 = 2 * np.pi * f_12
+    # --- Parámetros técnicos ---
+    w = 2 * np.pi * f_12
     Ls = Ls_mH_12 / 1000
     C = C_uF_12 * 1e-6
-    theta = np.linspace(0, 2*np.pi, 2000)
-    dt = (theta[1] - theta[0]) / w12
+    tau_dis = R_12 * C # Constante de descarga
     
-    v_s = Vm_11 = Vm_12 * np.sin(theta)
-    v_rec = np.abs(v_s) # Onda completa ideal
-    
-    # Simulación numérica del transitorio (Euler simple para fines pedagógicos)
+    # Creamos un tiempo extendido para estabilizar el transitorio
+    theta = np.linspace(0, 4*np.pi, 2000) 
+    v_s_abs = np.abs(Vm_12 * np.sin(theta))
     v_c = np.zeros_like(theta)
     i_s = np.zeros_like(theta)
-    v_c[0] = 0 # Capacitor descargado inicialmente
     
-    current_i = 0
+    # Simulación por estados (Diodo ON / Diodo OFF)
+    v_cap = 0 # Voltaje inicial
     for i in range(1, len(theta)):
-        v_in = v_rec[i]
-        # Estado del diodo: Conduce si Vin > Vc
-        if v_in > v_c[i-1]:
-            # Ls(di/dt) = Vin - Vc
-            di = ((v_in - v_c[i-1]) / Ls) * dt
-            current_i += di
-            # i_c = i_s - i_load
-            dv = ((current_i - (v_c[i-1]/R_12)) / C) * dt
-            v_c[i] = v_c[i-1] + dv
-            i_s[i] = current_i
+        dt_step = (theta[i] - theta[i-1]) / w
+        
+        # Condición de conducción: El voltaje de entrada debe ser mayor al del capacitor
+        # y además debe haber energía para vencer la Ls.
+        if v_s_abs[i] > v_cap:
+            # Simplificación de carga de capacitor con Ls y R:
+            # Para evitar oscilaciones de Euler, usamos un filtro de primer orden 
+            # que modela la tasa de transferencia limitada por Ls.
+            alpha = dt_step / (dt_step + (Ls / R_12) + (Ls * C / dt_step)) # Coeficiente de amortiguamiento
+            v_cap = v_cap + (v_s_abs[i] - v_cap) * min(alpha * 10, 1.0) 
+            i_s[i] = C * (v_cap - v_c[i-1]) / dt_step + (v_cap / R_12)
         else:
-            # Diodo bloqueado: Capacitor se descarga en R
-            current_i = 0
-            dv = (-(v_c[i-1]/R_12) / C) * dt
-            v_c[i] = v_c[i-1] + dv
+            # Descarga natural del capacitor en la resistencia
+            v_cap = v_cap * np.exp(-dt_step / tau_dis)
             i_s[i] = 0
+            
+        v_c[i] = v_cap
 
-    # --- Resultados ---
-    v_ripple = np.max(v_c[1000:]) - np.min(v_c[1000:])
-    v_avg = np.mean(v_c[1000:])
+    # Limpiamos i_s de posibles ruidos numéricos negativos
+    i_s = np.maximum(0, i_s)
+
+    # --- Resultados (último ciclo) ---
+    v_avg = np.mean(v_c[-500:])
+    v_ripple = np.max(v_c[-500:]) - np.min(v_c[-500:])
     
     c1, c2, c3 = st.columns(3)
     c1.metric("Voltaje CD Promedio", f"{v_avg:.2f} V")
     c2.metric("Voltaje de Rizado (ΔV)", f"{v_ripple:.2f} V")
-    c3.metric("Rizado (%)", f"{(v_ripple/v_avg)*100:.2f} %")
+    c3.metric("Rizado (%)", f"{(v_ripple/v_avg)*100:.1f} %")
 
     # --- Gráficas ---
     fig13, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
     
-    ax1.plot(theta, v_rec, 'gray', ls='--', alpha=0.3, label="|v_fuente|")
-    ax1.plot(theta, v_c, 'b', lw=2, label="v_capacitor(t)")
+    # Graficar solo los últimos dos ciclos para claridad
+    zoom = slice(1000, 2000)
+    ax1.plot(theta[zoom], v_s_abs[zoom], 'gray', ls='--', alpha=0.3, label="|v_fuente|")
+    ax1.plot(theta[zoom], v_c[zoom], 'b', lw=2, label="v_capacitor(t)")
     ax1.set_ylabel("Voltaje [V]"); ax1.legend(); ax1.grid(True)
-    ax1.set_title("Rectificación de Onda Completa con Filtrado")
     
-    ax2.plot(theta, i_s, 'r', lw=2, label="i_linea(t) (Pulsos)")
-    ax2.fill_between(theta, i_s, 0, color='red', alpha=0.2)
+    ax2.plot(theta[zoom], i_s[zoom], 'r', lw=2, label="i_linea(t)")
+    ax2.fill_between(theta[zoom], i_s[zoom], 0, color='red', alpha=0.2)
     ax2.set_ylabel("Corriente [A]"); ax2.set_xlabel("Fase [rad]"); ax2.legend(); ax2.grid(True)
     
     st.pyplot(fig13)
-
-    st.info("""
-    **Observaciones para el estudiante:**
-    1. **Picos de Corriente:** Note que la corriente de entrada ($i_s$) ya no es senoidal, sino una serie de pulsos angostos. Esto se debe a que el capacitor solo se carga en los picos de voltaje.
-    2. **Efecto de Ls:** Al aumentar la inductancia de línea, los pulsos de corriente se vuelven más anchos y de menor amplitud, lo cual es beneficioso para el factor de potencia pero reduce un poco el voltaje de salida.
-    3. **Rizado:** A mayor capacitancia ($C$) o mayor resistencia de carga ($R$), el rizado disminuye.
-    """)
