@@ -1379,7 +1379,7 @@ elif tema == "18. Bidireccionalidad de Potencia (Fuente I)":
 # =========================================================
 # MÓDULO 19: CALIDAD, REACTIVOS Y ESPECTRO ARMÓNICO
 # =========================================================
-elif tema == "17. Bidireccionalidad de Potencia (Fuente I)-extendido":
+elif tema == "19. Bidireccionalidad de Potencia (Fuente I)-extendido":
     st.header("Módulo 17: Calidad de Energía y Potencia Reactiva")
     st.write("Análisis de flujo de potencia, THD y consumo de reactivos.")
 
