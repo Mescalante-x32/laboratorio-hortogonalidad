@@ -702,13 +702,18 @@ elif tema == "11. Efecto de Inductancia de Línea":
     v_o = i_s * R_carga
     v_ls = v_s - v_o
 
+    # ... (resto del código igual arriba)
+    
     # --- Resultados ---
-    V_dc_11 = (1/(2*np.pi)) * np.trapz(v_o, theta)
+    # Usamos np.trapezoid en lugar de np.trapz para compatibilidad con NumPy 2.x
+    V_dc_11 = (1/(2*np.pi)) * np.trapezoid(v_o, theta)
     
     c1, c2, c3 = st.columns(3)
     c1.metric("Ángulo de Extinción β", f"{np.degrees(beta_11):.2f}°")
     c2.metric("Voltaje CD Promedio", f"{V_dc_11:.2f} V")
     c3.metric("Caída por Ls (estimada)", f"{((Vm_11/np.pi) - V_dc_11):.2f} V")
+    
+    # ... (continúa con las gráficas)
 
     # --- Gráficas ---
     fig12, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
