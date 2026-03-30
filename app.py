@@ -27,7 +27,8 @@ tema = st.sidebar.radio(
         "13. Onda Completa con Filtro L-C",
         "14. Filtro Tipo Pi (C-L-C)",
         "15. Autoevaluación: Rectificadores",
-        "16. Puente Controlado (Carga R y RL)"
+        "16. Puente Controlado (Carga R y RL)",
+        "17. Puente Controlado (Carga R y RL)"
     )
 )
 
@@ -1213,3 +1214,90 @@ elif tema == "16. Puente Controlado (Carga R y RL)":
     else:
         st.latex(r"V_{dc} = \frac{2 V_m}{\pi} \cos \alpha")
         st.warning("⚠️ En carga inductiva, el voltaje de salida puede ser **negativo** durante parte del ciclo debido a la energía almacenada en L.")
+
+# =========================================================
+# MÓDULO 16: PUENTE CONTROLADO CON CARGA R-L
+# =========================================================
+elif tema == "17. Puente Controlado (Carga R y RL)":
+    st.header("Módulo 16: Puente Monofásico Totalmente Controlado")
+    st.write("Efecto de la inductancia en el voltaje de salida y continuidad de corriente.")
+
+    with st.sidebar:
+        st.subheader("Control SCR")
+        Vm_16 = st.number_input("Voltaje Pico [V]", value=170.0)
+        f_16 = st.number_input("Frecuencia [Hz]", value=60.0)
+        alpha_deg = st.slider("Ángulo de Disparo (α) [°]", 0, 180, 45)
+        
+        st.markdown("---")
+        st.subheader("Parámetros R-L")
+        R_16 = st.number_input("Resistencia [Ω]", value=10.0)
+        L_mH_16 = st.number_input("Inductancia [mH]", value=50.0, step=10.0)
+        num_ciclos = st.slider("Ciclos a mostrar", 1, 5, 2)
+
+    # --- Cálculos Técnicos ---
+    w = 2 * np.pi * f_16
+    alpha = np.deg2rad(alpha_deg)
+    L = L_mH_16 / 1000
+    tau = L / R_16
+    Z = np.sqrt(R_16**2 + (w*L)**2)
+    phi = np.arctan(w*L/R_16)
+    
+    puntos = num_ciclos * 1000
+    theta = np.linspace(0, 2 * np.pi * num_ciclos, puntos)
+    dt = (theta[1] - theta[0]) / w
+    
+    v_s = Vm_16 * np.sin(theta)
+    v_out = np.zeros(puntos)
+    i_out = np.zeros(puntos)
+    
+    # Simulación numérica para carga RL
+    current = 0.0
+    for i in range(1, puntos):
+        angle = theta[i] % np.pi
+        
+        # Lógica de disparo del puente completo
+        # Conduce el par (T1,T2) o (T3,T4) después de alpha
+        if angle >= alpha:
+            v_rect = np.abs(v_s[i])
+        else:
+            # En conducción continua, el voltaje sigue a la fase anterior
+            v_rect = -np.abs(v_s[i])
+            
+        v_out[i] = v_rect
+        
+        # Resolución de la malla: v_out = R*i + L*di/dt
+        di = (v_out[i] - R_16 * current) / L * dt
+        current += di
+        if current < 0: current = 0 # El puente no permite corriente negativa
+        i_out[i] = current
+
+    # --- Métricas ---
+    v_dc_teo = (2 * Vm_16 / np.pi) * np.cos(alpha)
+    i_avg = np.mean(i_out[-500:])
+    
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Vdc Teórico", f"{v_dc_teo:.2f} V")
+    c2.metric("Idc Promedio", f"{i_avg:.2f} A")
+    c3.metric("Impedancia |Z|", f"{Z:.2f} Ω")
+
+    # --- Gráficas ---
+    fig16, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+    
+    ax1.plot(theta/(2*np.pi), v_s, 'gray', ls='--', alpha=0.3, label="v_fuente")
+    ax1.plot(theta/(2*np.pi), v_out, 'b', lw=2, label="v_salida (SCR)")
+    ax1.fill_between(theta/(2*np.pi), v_out, 0, color='blue', alpha=0.1)
+    ax1.set_ylabel("Voltaje [V]"); ax1.legend(); ax1.grid(True)
+    
+    ax2.plot(theta/(2*np.pi), i_out, 'r', lw=2, label="i_carga (RL)")
+    ax2.set_ylabel("Corriente [A]"); ax2.set_xlabel("Ciclos"); ax2.legend(); ax2.grid(True)
+    
+    st.pyplot(fig16)
+
+    st.latex(r"V_{dc} = \frac{2 V_m}{\pi} \cos \alpha")
+    
+    st.info(f"""
+    **Análisis para el alumno:**
+    * **Voltaje Negativo:** Observe cómo para $\alpha = {alpha_deg}^\circ$, el voltaje de salida cruza el eje cero. Esto ocurre porque la inductancia 'fuerza' a los SCRs a seguir conduciendo.
+    * **Conducción Continua:** Si la corriente no llega a cero antes del siguiente pulso, el sistema está en régimen continuo.
+    * **Control:** Note que si $\alpha > 90^\circ$, el voltaje promedio $V_{dc}$ se vuelve negativo (si existiera una fuente en la carga).
+    """)
