@@ -2236,3 +2236,4 @@ elif tema == "28. Troceador Clase B (Regenerativo)":
         * Esto aumenta la diferencia $(E - V_{o})$, lo que dispara la corriente de frenado.
         * **Cuidado:** Una corriente muy alta aumenta las pérdidas cuadráticas ($I^2R$), bajando la eficiencia aunque se recupere más potencia total.
         """)
+
