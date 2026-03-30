@@ -2465,7 +2465,7 @@ elif tema == "31. Control PI: Regulación de Corriente":
         """)
 
 # =========================================================
-# MÓDULO 32: CONTROL DE VELOCIDAD EN CASCADA (PI + PI)
+# MÓDULO 32: CONTROL EN CASCADA CON SEGUIMIENTO DE I_REF
 # =========================================================
 elif tema == "32. Control de Velocidad: Lazo en Cascada":
     st.header("Módulo 30: Control de Velocidad con Lazo de Corriente Interno")
@@ -2473,78 +2473,67 @@ elif tema == "32. Control de Velocidad: Lazo en Cascada":
     with st.sidebar:
         st.subheader("1. Lazo de Velocidad (Externo)")
         w_ref = st.number_input("Velocidad Deseada (w_ref) [rad/s]", value=100.0)
-        I_max = st.slider("Límite de Corriente (Sat) [A]", 5, 50, 25)
-        Kw_p = st.slider("Ganancia P (Velocidad)", 0.1, 15.0, 1.2)
-        Kw_i = st.slider("Ganancia I (Velocidad)", 0.1, 20.0, 5.0)
+        I_max = st.slider("Límite de Corriente (I_max) [A]", 5, 50, 20)
+        Kw_p = st.slider("Ganancia P (Velocidad)", 0.1, 5.0, 1.5)
+        Kw_i = st.slider("Ganancia I (Velocidad)", 0.1, 20.0, 8.0)
 
-        st.markdown("---")
-        st.subheader("2. Constantes de la Máquina")
-        J = st.number_input("Inercia (J) [kg·m²]", value=0.01, format="%.3f")
-        B = st.number_input("Fricción (B)", value=0.001, format="%.3f")
-        Kt = st.number_input("Constante de Torque (Kt=Ke)", value=0.5)
+    # --- Parámetros de Planta y Lazo Interno ---
+    L = 0.01; R = 0.5; V_dc = 200.0; Kt = 0.5; J = 0.01; B = 0.001
+    Kp_curr = 2.0; Ki_curr = 100.0 # Sintonía del Lazo Interno
 
-    # --- Parámetros Lazo Interno (Fijos para este ejemplo) ---
-    L = 0.01; R = 0.5; V_dc = 200.0
-    Kp_curr = 2.0; Ki_curr = 100.0 # Sintonía del Módulo 29
-
-    # --- Simulación Dinámica ---
-    fs = 5000; t_stop = 0.5; dt = 1/fs
+    # --- Simulación ---
+    fs = 5000; t_stop = 0.6; dt = 1/fs
     t_vec = np.linspace(0, t_stop, int(t_stop * fs))
     
-    # Estados iniciales
-    w_act = 0.0; i_act = 0.0
-    err_int_w = 0.0; err_int_i = 0.0
-    
-    h_w = []; h_i = []; h_D = []
+    w_act = 0.0; i_act = 0.0; err_int_w = 0.0; err_int_i = 0.0
+    h_w = []; h_i = []; h_i_ref = []; h_D = []
 
     for t in t_vec:
-        # --- LAZO EXTERNO (VELOCIDAD) ---
+        # LAZO EXTERNO: Generación de I_ref
         err_w = w_ref - w_act
         err_int_w += err_w * dt
-        # La salida es la corriente de referencia
         i_ref_raw = Kw_p * err_w + Kw_i * err_int_w
-        # LIMITACIÓN DE CORRIENTE (Protección)
+        
+        # Saturación de Corriente (Protección)
         i_ref_sat = max(-I_max, min(I_max, i_ref_raw))
         
-        # --- LAZO INTERNO (CORRIENTE) ---
-        E_emf = Kt * w_act # FEM dinámica
+        # LAZO INTERNO: Control de Corriente
+        E_emf = Kt * w_act
         err_i = i_ref_sat - i_act
         err_int_i += err_i * dt
         v_pi = Kp_curr * err_i + Ki_curr * err_int_i
-        v_total = v_pi + E_emf # Feed-forward
+        v_total = v_pi + E_emf 
         
         D = max(0.0, min(1.0, v_total / V_dc))
         
-        # --- FÍSICA DEL SISTEMA ---
-        # Eléctrica: di/dt
+        # DINÁMICA FÍSICA
         di = (D * V_dc - R * i_act - E_emf) / L * dt
         i_act += di
-        # Mecánica: dw/dt (Te = Kt * Ia)
-        Te = Kt * i_act
-        dw = (Te - B * w_act) / J * dt
+        dw = (Kt * i_act - B * w_act) / J * dt
         w_act += dw
         
-        h_w.append(w_act); h_i.append(i_act); h_D.append(D)
+        h_w.append(w_act); h_i.append(i_act); h_i_ref.append(i_ref_sat); h_D.append(D)
 
-    # --- Gráficas ---
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+    # --- Gráficas de Desempeño ---
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 9), sharex=True)
     
-    ax1.plot(t_vec, h_w, 'b', lw=2, label="Velocidad Real (w)")
-    ax1.axhline(w_ref, color='r', ls='--', label="w_ref")
-    ax1.set_ylabel("Velocidad [rad/s]"); ax1.legend(); ax1.grid(True)
+    # Velocidad
+    ax1.plot(t_vec, h_w, 'b', lw=2, label="Velocidad Real (ω)")
+    ax1.axhline(w_ref, color='r', ls='--', alpha=0.7, label="Referencia ω_ref")
+    ax1.set_ylabel("Velocidad [rad/s]"); ax1.grid(True, alpha=0.3); ax1.legend()
+    ax1.set_title("Respuesta Dinámica del Sistema en Cascada")
     
-    ax2.plot(t_vec, h_i, 'g', lw=2, label="Corriente Ia")
-    ax2.axhline(I_max, color='orange', ls=':', label="Límite I_max")
-    ax2.set_ylabel("Corriente [A]"); ax2.set_xlabel("Tiempo [s]"); ax2.legend(); ax2.grid(True)
+    # Corriente con Referencia Dinámica
+    ax2.plot(t_vec, h_i, 'g', lw=2, label="Corriente Real (Ia)")
+    ax2.plot(t_vec, h_i_ref, 'r', ls=':', lw=1.5, label="Referencia Ia_ref (Salida del PI Vel)")
+    ax2.axhline(I_max, color='orange', ls='--', alpha=0.5, label="Límite Físico (I_max)")
+    ax2.set_ylabel("Corriente [A]"); ax2.set_xlabel("Tiempo [s]"); ax2.grid(True, alpha=0.3); ax2.legend()
     
     st.pyplot(fig)
 
-    st.markdown("### 🔍 Análisis del Control en Cascada")
-    st.latex(r"I_{ref}(s) = \text{sat} \left( [Kw_p + \frac{Kw_i}{s}] \cdot (\omega_{ref} - \omega) \right)")
-    
     st.info(f"""
-    **Observaciones para la clase:**
-    1. **Saturación de Corriente:** Observe en la gráfica verde cómo la corriente se mantiene plana en **{I_max} A** durante la aceleración. Esto protege al motor mientras busca la velocidad deseada.
-    2. **Separación de Dinámicas:** El lazo de corriente es mucho más rápido que el de velocidad (debido a la inercia $J$). Por eso podemos sintonizarlos por separado.
-    3. **Respuesta Térmica/Mecánica:** Si aumenta la inercia **J**, la velocidad tardará más en llegar, pero la corriente seguirá limitada al mismo valor máximo.
+    **Análisis de Seguimiento:**
+    * Observe cómo la **línea punteada roja** ($I_{{ref}}$) sube instantáneamente al inicio para intentar acelerar el motor.
+    * Debido al límite de seguridad, la referencia se "estanca" en **{I_max} A** (línea naranja).
+    * Una vez que la velocidad se acerca a la meta, el lazo externo reduce $I_{{ref}}$ automáticamente para evitar el sobretiro.
     """)
