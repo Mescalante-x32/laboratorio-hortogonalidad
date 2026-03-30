@@ -741,76 +741,82 @@ elif tema == "11. Efecto de Inductancia de Línea":
     st.info(f"👉 **Análisis:** Al considerar la carga como una fuente de corriente constante **Id**, el ángulo de conmutación **u** representa el tiempo que tarda la corriente de línea en subir desde 0 hasta el valor de la carga. Durante este tiempo (**{u_deg:.1f}°**), el voltaje en la carga es cero, lo que reduce el voltaje promedio final.")
 
 # =========================================================
-# MÓDULO 12 CORREGIDO: ONDA COMPLETA (SIN OSCILACIONES)
+# MÓDULO 12 REFINADO: ONDA COMPLETA (ALTA RESOLUCIÓN)
 # =========================================================
 elif tema == "12. Onda Completa con Filtro C y Ls":
     st.header("Módulo 12: Rectificador de Onda Completa (Filtro C + Ls)")
-    st.write("Análisis realista del rizado y pulsos de corriente de entrada.")
+    st.write("Análisis detallado con resolución numérica mejorada para evitar inestabilidades.")
 
     with st.sidebar:
         st.subheader("Parámetros del Circuito")
-        Vm_12 = st.number_input("Voltaje Pico Fuente [V]", value=170.0)
-        f_12 = st.number_input("Frecuencia [Hz]", value=60.0)
-        Ls_mH_12 = st.slider("Inductancia de Línea Ls [mH]", 0.001, 10.0, 1.0, step=0.01)
-        C_uF_12 = st.number_input("Capacitor de Filtro [µF]", value=1000.0, step=100.0)
-        R_12 = st.number_input("Resistencia de Carga [Ω]", value=50.0, min_value=1.0)
+        Vm_12 = st.number_input("Voltaje Pico Fuente [V]", value=170.0, key="vm12_r")
+        f_12 = st.number_input("Frecuencia [Hz]", value=60.0, key="f12_r")
+        Ls_mH_12 = st.slider("Inductancia de Línea Ls [mH]", 0.1, 10.0, 1.0, step=0.1, key="ls12_r")
+        C_uF_12 = st.number_input("Capacitor de Filtro [µF]", value=1000.0, step=100.0, key="c12_r")
+        R_12 = st.number_input("Resistencia de Carga [Ω]", value=50.0, min_value=1.0, key="r12_r")
 
-    # --- Parámetros técnicos ---
+    # --- Configuración de Simulación de Alta Resolución ---
     w = 2 * np.pi * f_12
     Ls = Ls_mH_12 / 1000
     C = C_uF_12 * 1e-6
-    tau_dis = R_12 * C # Constante de descarga
     
-    # Creamos un tiempo extendido para estabilizar el transitorio
-    theta = np.linspace(0, 4*np.pi, 2000) 
+    # Aumentamos puntos para estabilidad numérica (paso de tiempo muy pequeño)
+    puntos = 5000
+    theta = np.linspace(0, 4*np.pi, puntos) 
+    dt = (theta[1] - theta[0]) / w
+    
     v_s_abs = np.abs(Vm_12 * np.sin(theta))
-    v_c = np.zeros_like(theta)
-    i_s = np.zeros_like(theta)
+    v_c = np.zeros(puntos)
+    i_s = np.zeros(puntos)
     
-    # Simulación por estados (Diodo ON / Diodo OFF)
-    v_cap = 0 # Voltaje inicial
-    for i in range(1, len(theta)):
-        dt_step = (theta[i] - theta[i-1]) / w
+    v_cap = 0.0
+    i_linea = 0.0
+    
+    for i in range(1, puntos):
+        # Ecuación de descarga (siempre ocurre a través de R)
+        i_load = v_cap / R_12
         
-        # Condición de conducción: El voltaje de entrada debe ser mayor al del capacitor
-        # y además debe haber energía para vencer la Ls.
-        if v_s_abs[i] > v_cap:
-            # Simplificación de carga de capacitor con Ls y R:
-            # Para evitar oscilaciones de Euler, usamos un filtro de primer orden 
-            # que modela la tasa de transferencia limitada por Ls.
-            alpha = dt_step / (dt_step + (Ls / R_12) + (Ls * C / dt_step)) # Coeficiente de amortiguamiento
-            v_cap = v_cap + (v_s_abs[i] - v_cap) * min(alpha * 10, 1.0) 
-            i_s[i] = C * (v_cap - v_c[i-1]) / dt_step + (v_cap / R_12)
+        # Lógica del Diodo
+        # Conduce si V_source > V_cap O si todavía hay corriente en Ls (extinción)
+        if v_s_abs[i] > v_cap or i_linea > 0:
+            # di/dt = (V_s - V_cap) / Ls
+            di = ((v_s_abs[i] - v_cap) / Ls) * dt
+            i_linea += di
+            # i_linea no puede ser negativa (el diodo bloquea)
+            if i_linea < 0: i_linea = 0
+            
+            # dv/dt = (i_linea - i_load) / C
+            dv = ((i_linea - i_load) / C) * dt
+            v_cap += dv
         else:
-            # Descarga natural del capacitor en la resistencia
-            v_cap = v_cap * np.exp(-dt_step / tau_dis)
-            i_s[i] = 0
+            # Solo descarga
+            i_linea = 0
+            dv = (-i_load / C) * dt
+            v_cap += dv
             
         v_c[i] = v_cap
+        i_s[i] = i_linea
 
-    # Limpiamos i_s de posibles ruidos numéricos negativos
-    i_s = np.maximum(0, i_s)
-
-    # --- Resultados (último ciclo) ---
-    v_avg = np.mean(v_c[-500:])
-    v_ripple = np.max(v_c[-500:]) - np.min(v_c[-500:])
+    # --- Resultados (Estado Estable) ---
+    zoom_idx = int(puntos * 0.75) # Tomamos el último ciclo
+    v_avg = np.mean(v_c[zoom_idx:])
+    v_ripple = np.max(v_c[zoom_idx:]) - np.min(v_c[zoom_idx:])
     
     c1, c2, c3 = st.columns(3)
     c1.metric("Voltaje CD Promedio", f"{v_avg:.2f} V")
     c2.metric("Voltaje de Rizado (ΔV)", f"{v_ripple:.2f} V")
-    c3.metric("Rizado (%)", f"{(v_ripple/v_avg)*100:.1f} %")
+    c3.metric("I_pico Linea", f"{np.max(i_s):.2f} A")
 
     # --- Gráficas ---
     fig13, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+    plot_slice = slice(int(puntos/2), puntos) # Mostrar últimos 2 ciclos
     
-    # Graficar solo los últimos dos ciclos para claridad
-    zoom = slice(1000, 2000)
-    ax1.plot(theta[zoom], v_s_abs[zoom], 'gray', ls='--', alpha=0.3, label="|v_fuente|")
-    ax1.plot(theta[zoom], v_c[zoom], 'b', lw=2, label="v_capacitor(t)")
+    ax1.plot(theta[plot_slice], v_s_abs[plot_slice], 'gray', ls='--', alpha=0.3, label="|v_fuente|")
+    ax1.plot(theta[plot_slice], v_c[plot_slice], 'b', lw=2, label="v_capacitor(t)")
     ax1.set_ylabel("Voltaje [V]"); ax1.legend(); ax1.grid(True)
     
-    ax2.plot(theta[zoom], i_s[zoom], 'r', lw=2, label="i_linea(t)")
-    ax2.fill_between(theta[zoom], i_s[zoom], 0, color='red', alpha=0.2)
+    ax2.plot(theta[plot_slice], i_s[plot_slice], 'r', lw=2, label="i_linea(t)")
+    ax2.fill_between(theta[plot_slice], i_s[plot_slice], 0, color='red', alpha=0.2)
     ax2.set_ylabel("Corriente [A]"); ax2.set_xlabel("Fase [rad]"); ax2.legend(); ax2.grid(True)
     
     st.pyplot(fig13)
