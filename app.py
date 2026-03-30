@@ -24,7 +24,8 @@ tema = st.sidebar.radio(
         "10. Diodo de Marcha Libre (Freewheeling)",
         "11. Efecto de Inductancia de Línea",
         "12. Onda Completa con Filtro C y Ls",
-        "13. Onda Completa con Filtro L-C"
+        "13. Onda Completa con Filtro L-C",
+        "14. Filtro Tipo Pi (C-L-C)"
     )
 )
 
@@ -923,3 +924,69 @@ elif tema == "13. Onda Completa con Filtro L-C":
         st.warning(f"⚠️ **Conducción Discontinua:** La inductancia actual ({Lf_mH} mH) es menor a la crítica ({Lc_teorica:.1f} mH). La corriente i_L llega a cero, lo que aumenta el rizado y degrada la regulación.")
     else:
         st.success(f"✅ **Conducción Continua:** El filtro opera correctamente por encima de la inductancia crítica.")
+
+# =========================================================
+# MÓDULO 14: RECTIFICADOR CON FILTRO TIPO PI (C-L-C)
+# =========================================================
+elif tema == "14. Filtro Tipo Pi (C-L-C)":
+    st.header("Módulo 14: Rectificador con Filtro Tipo Pi ($\pi$)")
+    st.write("Configuración de alto desempeño: Capacitor - Inductor - Capacitor.")
+
+    with st.sidebar:
+        st.subheader("Entrada CA")
+        Vm_14 = st.number_input("Voltaje Pico [V]", value=170.0)
+        
+        st.markdown("---")
+        st.subheader("Componentes del Filtro")
+        C1_uF = st.number_input("C1 (Entrada) [µF]", value=470.0)
+        Lf_mH = st.number_input("L (Choque) [mH]", value=100.0)
+        C2_uF = st.number_input("C2 (Salida) [µF]", value=470.0)
+        R_14 = st.number_input("Carga R [Ω]", value=100.0)
+        num_ciclos = st.slider("Ciclos", 2, 15, 6)
+
+    # --- Simulación de Espacio de Estados ---
+    w = 2 * np.pi * 60
+    C1, Lf, C2 = C1_uF*1e-6, Lf_mH*1e-3, C2_uF*1e-6
+    puntos = num_ciclos * 2000
+    theta = np.linspace(0, 2*np.pi*num_ciclos, puntos)
+    dt = (theta[1]-theta[0])/w
+    
+    v_s_abs = np.abs(Vm_14 * np.sin(theta))
+    v_c1, v_c2, i_l = np.zeros(puntos), np.zeros(puntos), np.zeros(puntos)
+    
+    vc1, vc2, il = 0.0, 0.0, 0.0
+    
+    for i in range(1, puntos):
+        # 1. Carga de C1 desde el puente
+        if v_s_abs[i] > vc1:
+            vc1 = v_s_abs[i] # Diodo ideal cargando C1
+        
+        # 2. Ecuaciones diferenciales del filtro L-C2
+        # dIl/dt = (Vc1 - Vc2) / L
+        # dVc2/dt = (Il - Vc2/R) / C2
+        # dVc1/dt = -Il / C1 (cuando el diodo no conduce)
+        
+        dil = ((vc1 - vc2) / Lf) * dt
+        il += dil
+        if il < 0: il = 0
+        
+        dvc2 = ((il - (vc2/R_14)) / C2) * dt
+        vc2 += dvc2
+        
+        if v_s_abs[i] <= vc1: # Si el puente no está cargando C1
+            dvc1 = (-il / C1) * dt
+            vc1 += dvc1
+            
+        v_c1[i], v_c2[i], i_l[i] = vc1, vc2, il
+
+    # --- Métricas y Gráficas ---
+    st.metric("Rizado Final (ΔV)", f"{(np.max(v_c2[-500:]) - np.min(v_c2[-500:])):.4f} V")
+
+    fig15, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+    ax1.plot(theta/(2*np.pi), v_c1, 'orange', label="V en C1 (Intermedio)", alpha=0.5)
+    ax1.plot(theta/(2*np.pi), v_c2, 'b', label="V en C2 (Salida)", lw=2)
+    ax1.set_ylabel("Voltaje [V]"); ax1.legend(); ax1.grid(True)
+    
+    ax2.plot(theta/(2*np.pi), i_l, 'g', label="Corriente en L (Filtro)")
+    ax2.set_ylabel("Corriente [A]"); ax2.set_xlabel("Ciclos"); ax2.legend(); ax2.grid(True)
+    st.pyplot(fig15)
