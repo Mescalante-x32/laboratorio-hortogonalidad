@@ -38,7 +38,8 @@ tema = st.sidebar.radio(
         "24. Autoevaluación: Sistemas Multi-pulso",
         "25. Traslape en Sistemas Trifásicos",
         "26. Troceadores y Cuadrantes de Operación",
-        "27. Análisis de Rizado y L Crítica"
+        "27. Análisis de Rizado y L Crítica",
+        "28. Troceador Clase B (Regenerativo)"
     )
 )
 
@@ -2176,4 +2177,80 @@ elif tema == "27. Análisis de Rizado y L Crítica":
     * **Rizado:** Con $L = {La_mH}$ mH, el rizado es del { (delta_i/Ia_avg*100 if Ia_avg > 0 else 0):.1f}% respecto a la media.
     * **Efecto de la frecuencia:** Si aumenta $f_{{sw}}$, verá cómo $\Delta i$ disminuye, permitiendo inductores más pequeños.
     * **Condición Crítica:** Para mantener conducción continua con esta carga, se requeriría una $L > {L_crit_aprox*1000:.2f}$ mH.
+    """)
+
+# =========================================================
+# MÓDULO 28: TROCEADOR CLASE B - FRENADO REGENERATIVO
+# =========================================================
+elif tema == "28. Troceador Clase B (Regenerativo)":
+    st.header("Módulo 26: Recuperación de Energía y Frenado")
+    st.write("Análisis del flujo de potencia desde la carga hacia la fuente CD.")
+
+    with st.sidebar:
+        st.subheader("Condiciones de Frenado")
+        V_dc = st.number_input("Voltaje de Red/Batería [V]", value=200.0)
+        f_sw = st.number_input("Frecuencia de Conmutación [Hz]", value=2500.0)
+        D = st.slider("Ciclo de Trabajo (D)", 0.05, 0.95, 0.6)
+        
+        st.markdown("---")
+        st.subheader("Estado del Motor (Generador)")
+        E_gen = st.number_input("FEM Generada (E) [V]", value=150.0, help="E debe ser menor a Vdc para control")
+        La_mH = st.number_input("Inductancia de Suavizado [mH]", value=15.0)
+        Ra = st.number_input("Resistencia [Ω]", value=0.8)
+
+    # --- Lógica Física ---
+    # En Clase B: Vo_avg = (1-D)*Vdc. Para que haya frenado: E > Vo_avg
+    T = 1 / f_sw
+    L = La_mH / 1000
+    V_avg_out = (1 - D) * V_dc
+    I_avg_frenado = (E_gen - V_avg_out) / Ra if E_gen > V_avg_out else 0.0
+    
+    # Rizado de corriente
+    delta_i = (V_dc - V_avg_out) * ((1-D) * T) / L if I_avg_frenado > 0 else 0
+    
+    # Potencia Regenerada
+    P_gen = V_avg_out * I_avg_frenado
+
+    # --- Métricas de Aprendizaje ---
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Corriente de Frenado", f"{I_avg_frenado:.2f} A")
+    c2.metric("Potencia Recuperada", f"{P_gen:.2f} W")
+    c3.metric("Voltaje Promedio Vo", f"{V_avg_out:.1f} V")
+
+    # --- Simulación de Formas de Onda ---
+    t_sim = np.linspace(0, 2*T, 1000)
+    # En Clase B el interruptor está en paralelo con la carga
+    v_switch = np.where((t_sim % T) < D*T, 0, V_dc) 
+    
+    i_frenado = np.zeros_like(t_sim)
+    curr = I_avg_frenado - (delta_i/2)
+    for i in range(1, len(t_sim)):
+        dt = t_sim[i] - t_sim[i-1]
+        # E - L(di/dt) - Ri = v_switch
+        di = (E_gen - Ra * curr - v_switch[i]) / L * dt
+        curr += di
+        i_frenado[i] = max(0, curr)
+
+    # --- Visualización Potenciada ---
+    fig26, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 9), sharex=True)
+    
+    # Grafica 1: Tensiones y el concepto de "Boost"
+    ax1.plot(t_sim*1000, v_switch, 'r', lw=2, label="v_terminal(t)")
+    ax1.axhline(E_gen, color='blue', ls='--', label="E (FEM del Motor)")
+    ax1.set_ylabel("Voltaje [V]"); ax1.legend(loc='upper right'); ax1.grid(True)
+    ax1.set_title("Dinámica de Voltajes en Frenado Clase B")
+    
+    # Grafica 2: Corriente (Notar que es opuesta al modo motor)
+    ax2.plot(t_sim*1000, i_frenado, 'darkorange', lw=2, label="i_regeneración(t)")
+    ax2.fill_between(t_sim*1000, i_frenado, 0, color='orange', alpha=0.1)
+    ax2.set_ylabel("Corriente [A]"); ax2.set_xlabel("Tiempo [ms]"); ax2.legend(); ax2.grid(True)
+    
+    st.pyplot(fig26)
+
+    # --- Bloque Teórico de Refuerzo ---
+    st.info(f"""
+    **¿Cómo ocurre la regeneración?**
+    1. **Intervalo ON ($DT$):** El interruptor se cierra, la corriente crece en el inductor almacenando energía magnética desde la FEM ($E$). El motor se "cortocircuita" a través de $L$.
+    2. **Intervalo OFF ($(1-D)T$):** El interruptor se abre. La inductancia se opone al cambio de corriente y suma su voltaje al de la FEM ($E + L\frac{{di}}{{dt}}$), superando a $V_{{dc}}$ y forzando la energía hacia la fuente.
+    3. **Control:** Al aumentar $D$, el tiempo de carga de $L$ es mayor, lo que incrementa la corriente y el par de frenado.
     """)
