@@ -19,7 +19,8 @@ tema = st.sidebar.radio(
         "5. Circuitos CA (Carga R-L)",
         "6. Corrección del Factor de Potencia",
         "7. Parámetros No Sinusoidales",
-        "8. Autoevaluación de CA y Armónicos"
+        "8. Autoevaluación de CA y Armónicos",
+        "9. Rectificador de Media Onda (R-L)"
     )
 )
 
@@ -504,3 +505,79 @@ elif tema == "8. Autoevaluación de CA y Armónicos":
             if aciertos >= 8:
                 st.balloons()
                 st.write("¡Excelente dominio de CA!")
+
+# ==========================================
+# MÓDULO 9: RECTIFICADOR DE MEDIA ONDA (R-L)
+# ==========================================
+elif tema == "9. Rectificador de Media Onda (R-L)":
+    st.header("Módulo 9: Rectificador de Media Onda con Carga Resistiva-Inductiva")
+    st.write("Análisis del efecto de la inductancia en el ángulo de conducción del diodo.")
+
+    with st.sidebar:
+        st.subheader("Parámetros de Entrada")
+        Vm_9 = st.number_input("Voltaje Pico de Fuente (Vm)", value=170.0)
+        f_9 = st.number_input("Frecuencia [Hz]", value=60.0, key="f9")
+        R_9 = st.number_input("Resistencia R [Ω]", value=10.0, min_value=1.0)
+        L_9_mH = st.number_input("Inductancia L [mH]", value=20.0, min_value=0.0)
+
+    # --- Cálculos del Rectificador ---
+    w9 = 2 * np.pi * f_9
+    L_9 = L_9_mH / 1000
+    Z_9 = np.sqrt(R_9**2 + (w9*L_9)**2)
+    phi_9 = np.arctan2(w9*L_9, R_9) # Ángulo de impedancia
+    
+    # Encontrar beta (ángulo de extinción) numéricamente
+    # i(beta) = (Vm/Z) * [sin(beta - phi) + sin(phi)*exp(-beta/(w*tau))] = 0
+    tau_9 = L_9 / R_9
+    def ecuacion_corriente(ang):
+        return np.sin(ang - phi_9) + np.sin(phi_9) * np.exp(-ang / (w9 * tau_9))
+
+    # Buscamos beta entre pi y 2*pi
+    angulos_busqueda = np.linspace(np.pi + 0.01, 2*np.pi - 0.01, 500)
+    beta = np.pi + 0.5 # Valor por defecto
+    for a in angulos_busqueda:
+        if ecuacion_corriente(a) < 0:
+            beta = a
+            break
+
+    # --- Generación de Ondas ---
+    theta = np.linspace(0, 2*np.pi, 1000)
+    t_9 = theta / w9
+    v_s = Vm_9 * np.sin(theta)
+    
+    # Corriente instantánea i(t)
+    i_t = np.zeros_like(theta)
+    indices_conduccion = np.where(theta <= beta)[0]
+    i_t[indices_conduccion] = (Vm_9 / Z_9) * (np.sin(theta[indices_conduccion] - phi_9) + 
+                                              np.sin(phi_9) * np.exp(-theta[indices_conduccion] / (w9 * tau_9)))
+    
+    # Voltaje en la carga v_o(t)
+    v_o = np.where(theta <= beta, v_s, 0)
+    
+    # --- Parámetros de Salida ---
+    V_dc_9 = (Vm_9 / (2*np.pi)) * (1 - np.cos(beta))
+    I_dc_9 = V_dc_9 / R_9
+    
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Ángulo φ (Impedancia)", f"{np.degrees(phi_9):.2f}°")
+    col2.metric("Ángulo β (Extinción)", f"{np.degrees(beta):.2f}°")
+    col3.metric("Voltaje CD Promedio", f"{V_dc_9:.2f} V")
+
+    # --- Gráficas ---
+    fig10, (ax_v, ax_i) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+    
+    ax_v.plot(theta, v_s, 'gray', linestyle='--', alpha=0.5, label="v_source(t)")
+    ax_v.plot(theta, v_o, 'b', lw=2, label="v_output(t)")
+    ax_v.axvline(beta, color='r', ls=':', label=f'β = {np.degrees(beta):.1f}°')
+    ax_v.set_ylabel("Voltaje [V]"); ax_v.legend(); ax_v.grid(True)
+    
+    ax_i.plot(theta, i_t, 'r', lw=2, label="i_output(t)")
+    ax_i.set_ylabel("Corriente [A]"); ax_i.set_xlabel("Fase [rad]"); ax_i.legend(); ax_i.grid(True)
+    
+    st.pyplot(fig10)
+
+    st.info(f"💡 **Observación Pedagógica:** Note que aunque el voltaje de fuente cruza por cero en π (180°), la corriente continúa hasta β debido a la energía almacenada en el inductor. En el intervalo entre π y β, el voltaje de salida es negativo.")
+
+    # --- Descarga de Datos ---
+    datos_m9 = {'Fase [rad]': theta, 'V_fuente [V]': v_s, 'V_carga [V]': v_o, 'I_carga [A]': i_t}
+    st.download_button("📥 Descargar Datos de Rectificación", preparar_descarga(datos_m9), "rectificador_media_onda.csv")
