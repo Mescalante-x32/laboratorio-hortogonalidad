@@ -2474,7 +2474,7 @@ elif tema == "32. Control de Velocidad: Lazo en Cascada":
         st.subheader("1. Lazo de Velocidad (Externo)")
         w_ref = st.number_input("Velocidad Deseada (w_ref) [rad/s]", value=100.0)
         I_max = st.slider("Límite de Corriente (Sat) [A]", 5, 50, 25)
-        Kw_p = st.slider("Ganancia P (Velocidad)", 0.1, 5.0, 1.2)
+        Kw_p = st.slider("Ganancia P (Velocidad)", 0.1, 15.0, 1.2)
         Kw_i = st.slider("Ganancia I (Velocidad)", 0.1, 20.0, 5.0)
 
         st.markdown("---")
