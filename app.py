@@ -26,7 +26,8 @@ tema = st.sidebar.radio(
         "12. Onda Completa con Filtro C y Ls",
         "13. Onda Completa con Filtro L-C",
         "14. Filtro Tipo Pi (C-L-C)",
-        "15. Autoevaluación: Rectificadores"
+        "15. Autoevaluación: Rectificadores",
+        "16. Puente Controlado (Carga R y RL)"
     )
 )
 
@@ -1126,3 +1127,89 @@ elif tema == "15. Autoevaluación: Rectificadores":
         """)
 
     st.markdown("---")
+
+# =========================================================
+# MÓDULO 16: PUENTE TOTALMENTE CONTROLADO (SCR)
+# =========================================================
+elif tema == "16. Puente Controlado (Carga R y RL)":
+    st.header("Módulo 16: Puente Monofásico Totalmente Controlado")
+    st.write("Control de fase mediante tiristores (SCR) para regulación de voltaje CD.")
+
+    with st.sidebar:
+        st.subheader("Parámetros de Control")
+        Vm_16 = st.number_input("Voltaje Pico [V]", value=170.0, key="v16")
+        f_16 = st.number_input("Frecuencia [Hz]", value=60.0)
+        
+        # Parámetro crítico: Ángulo de disparo alfa
+        alpha_deg = st.slider("Ángulo de Disparo (α) [°]", 0, 180, 45)
+        
+        st.markdown("---")
+        st.subheader("Tipo de Carga")
+        tipo_carga = st.radio("Seleccione Carga:", ["Resistiva (R)", "Inductiva (R-L)"])
+        R_16 = st.number_input("Resistencia [Ω]", value=20.0)
+        
+        L_mH_16 = 0.0
+        if tipo_carga == "Inductiva (R-L)":
+            L_mH_16 = st.number_input("Inductancia [mH]", value=50.0, step=10.0)
+
+    # --- Cálculos y Simulación ---
+    alpha_rad = np.deg2rad(alpha_deg)
+    w = 2 * np.pi * f_16
+    theta = np.linspace(0, 4 * np.pi, 2000) # Dos ciclos
+    v_s = Vm_16 * np.sin(theta)
+    v_out = np.zeros_like(theta)
+    i_out = np.zeros_like(theta)
+
+    if tipo_carga == "Resistiva (R)":
+        # En carga R, el tiristor deja de conducir en el cruce por cero (180°)
+        for i, t in enumerate(theta % (np.pi)):
+            if t >= alpha_rad:
+                v_out[i] = np.abs(v_s[i])
+        i_out = v_out / R_16
+        
+        # Fórmula teórica Vdc = (2*Vm/pi) * cos(alpha) solo aplica en conducción continua RL.
+        # Para carga R: Vdc = (Vm/pi) * (1 + cos(alpha))
+        v_dc_teo = (Vm_16 / np.pi) * (1 + np.cos(alpha_rad))
+
+    else:
+        # Carga Inductiva (Simplificación de Conducción Continua)
+        # En puentes totalmente controlados con L grande, v_out puede ser negativo
+        for i, t in enumerate(theta % (np.pi)):
+            if t >= alpha_rad or t <= 0: # Simplificación de disparo
+                v_out[i] = Vm_16 * np.sin(theta[i]) if v_s[i] > 0 else -Vm_16 * np.sin(theta[i])
+        
+        # En RL, v_out sigue a la fuente hasta el siguiente disparo alpha + pi
+        # Usamos una lógica de ventana para mostrar el efecto del voltaje negativo
+        for i in range(len(theta)):
+            phi = theta[i] % np.pi
+            if phi < alpha_rad:
+                v_out[i] = -Vm_16 * np.abs(np.sin(theta[i]))
+            else:
+                v_out[i] = Vm_16 * np.abs(np.sin(theta[i]))
+        
+        i_out = np.full_like(theta, (2*Vm_16/np.pi * np.cos(alpha_rad))/R_16) # Promedio aprox
+        v_dc_teo = (2 * Vm_16 / np.pi) * np.cos(alpha_rad)
+
+    # --- Interfaz y Gráficas ---
+    c1, c2 = st.columns(2)
+    c1.metric("Vdc Teórico", f"{v_dc_teo:.2f} V")
+    c1.metric("Ángulo α", f"{alpha_deg}°")
+
+    fig16, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+    
+    ax1.plot(theta, v_s, 'gray', ls='--', alpha=0.3, label="v_fuente(t)")
+    ax1.plot(theta, v_out, 'b', lw=2, label="v_salida(t)")
+    ax1.fill_between(theta, v_out, 0, color='blue', alpha=0.1)
+    ax1.set_ylabel("Voltaje [V]"); ax1.legend(); ax1.grid(True)
+    
+    ax2.plot(theta, i_out, 'r', lw=2, label="i_carga(t)")
+    ax2.set_ylabel("Corriente [A]"); ax2.set_xlabel("Fase [rad]"); ax2.legend(); ax2.grid(True)
+    
+    st.pyplot(fig16)
+
+    if tipo_carga == "Resistiva (R)":
+        st.latex(r"V_{dc} = \frac{V_m}{\pi} (1 + \cos \alpha)")
+        st.info("💡 En carga resistiva, el tiristor se apaga naturalmente en $\pi, 2\pi, ...$ porque la corriente cae a cero.")
+    else:
+        st.latex(r"V_{dc} = \frac{2 V_m}{\pi} \cos \alpha")
+        st.warning("⚠️ En carga inductiva, el voltaje de salida puede ser **negativo** durante parte del ciclo debido a la energía almacenada en L.")
