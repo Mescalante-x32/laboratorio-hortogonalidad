@@ -40,7 +40,8 @@ tema = st.sidebar.radio(
         "26. Troceadores y Cuadrantes de Operación",
         "27. Análisis de Rizado y L Crítica",
         "28. Troceador Clase B (Regenerativo)",
-        "29. Troceador Clase C: Tracción y Frenado"
+        "29. Troceador Clase C: Tracción y Frenado",
+        "30. Puente en H: Control Total (4 Cuadrantes)"
     )
 )
 
@@ -2380,4 +2381,82 @@ elif tema == "29. Troceador Clase C: Tracción y Frenado":
     * El punto donde la corriente se invierte es $D = {D_crit:.2f}$. 
     * Actualmente, con $D = {D_27:.2f}$, el sistema está en modo **{status}**.
     * Si usted ajusta el slider de **D** por debajo de **{D_crit:.2f}**, verá cómo la corriente se vuelve negativa automáticamente sin cambiar ninguna conexión física.
+    """)
+
+# =========================================================
+# MÓDULO 30: PUENTE EN H (CUATRO CUADRANTES)
+# =========================================================
+elif tema == "30. Puente en H: Control Total (4 Cuadrantes)":
+    st.header("Módulo 28: Convertidor de Puente Completo")
+    st.write("Control de velocidad, sentido de giro y frenado regenerativo total.")
+
+    with st.sidebar:
+        st.subheader("Configuración del Puente H")
+        V_dc_28 = st.number_input("Voltaje de Fuente (Vdc) [V]", value=200.0, key="vdc28")
+        f_sw_28 = st.number_input("Frecuencia PWM [Hz]", value=2500.0, key="fsw28")
+        D_28 = st.slider("Ciclo de Trabajo (D)", 0.0, 1.0, 0.5, key="d28")
+        
+        st.markdown("---")
+        st.subheader("Parámetros del Motor")
+        E_28 = st.number_input("FEM (E) [V]", value=0.0, help="Positiva para giro horario, negativa para anti-horario")
+        La_28 = st.number_input("Inductancia La [mH]", value=10.0)
+        Ra_28 = st.number_input("Resistencia Ra [Ω]", value=0.5)
+
+    # --- Cálculos de 4 Cuadrantes ---
+    T_28 = 1 / f_sw_28
+    L_28 = La_28 / 1000
+    # Voltaje promedio bipolar: Va = Vdc * (2D - 1)
+    Va_avg = V_dc_28 * (2 * D_28 - 1)
+    
+    # Corriente promedio
+    Ia_avg = (Va_avg - E_28) / Ra_28
+    
+    # --- Identificación de Cuadrante ---
+    st.subheader("📊 Análisis de Operación")
+    c1, c2, c3 = st.columns(3)
+    
+    if Va_avg >= 0:
+        quad = "I (Motor R)" if Ia_avg >= 0 else "II (Freno R)"
+    else:
+        quad = "III (Motor L)" if Ia_avg <= 0 else "IV (Freno L)"
+    
+    c1.metric("Cuadrante Activo", quad)
+    c2.metric("Voltaje Promedio Va", f"{Va_avg:.1f} V")
+    c3.metric("Corriente Ia", f"{Ia_avg:.2f} A")
+
+    # --- Simulación Temporal (Bipolar) ---
+    t_sim = np.linspace(0, 2*T_28, 2000)
+    # En conmutación bipolar, Va salta entre +Vdc y -Vdc
+    v_out_t = np.where((t_sim % T_28) < D_28*T_28, V_dc_28, -V_dc_28)
+    
+    # Rizado (Delta i es el doble que en unipolar para el mismo L y fsw)
+    delta_i = (2 * V_dc_28 * D_28 * (1 - D_28) * T_28) / L_28
+    
+    i_sim = np.zeros_like(t_sim)
+    curr = Ia_avg - (delta_i / 2)
+    for i in range(1, len(t_sim)):
+        dt = t_sim[i] - t_sim[i-1]
+        di = (v_out_t[i] - Ra_28 * curr - E_28) / L_28 * dt
+        curr += di
+        i_sim[i] = curr
+
+    # --- Gráficas ---
+    fig28, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+    
+    ax1.plot(t_sim*1000, v_out_t, 'b', alpha=0.6, label="v_terminal(t)")
+    ax1.axhline(Va_avg, color='orange', lw=2, label=f"Va_avg={Va_avg:.1f}V")
+    ax1.axhline(E_28, color='r', ls='--', label="E (FEM)")
+    ax1.set_ylabel("Voltaje [V]"); ax1.grid(True, alpha=0.3); ax1.legend()
+    
+    ax2.plot(t_sim*1000, i_sim, 'darkgreen', lw=2)
+    ax2.axhline(0, color='black', lw=1)
+    ax2.set_ylabel("Corriente Ia [A]"); ax2.set_xlabel("Tiempo [ms]"); ax2.grid(True, alpha=0.3)
+    
+    st.pyplot(fig28)
+
+    st.info(f"""
+    **Lección Final de Troceadores:**
+    1. **Inversión de Marcha:** Mueva el slider de D por debajo de 0.5 y observe cómo el voltaje promedio se vuelve negativo.
+    2. **Rizado Bipolar:** Note que el voltaje de salida ahora conmuta entre **+{V_dc_28}V** y **-{V_dc_28}V**. Esto duplica el rizado de corriente en comparación con los módulos anteriores.
+    3. **Cuadrantes:** Al ajustar la FEM (E) y el Ciclo de Trabajo (D), el estudiante puede posicionar el sistema en cualquiera de los 4 cuadrantes del plano V-I.
     """)
