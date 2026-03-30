@@ -761,7 +761,7 @@ elif tema == "12. Onda Completa con Filtro C y Ls":
     C = C_uF_12 * 1e-6
     
     # Simulación de 5 ciclos para ver el arranque y el estado estable
-    puntos = 6000
+    puntos = 3*6000
     theta = np.linspace(0, 6*np.pi, puntos) 
     dt = (theta[1] - theta[0]) / w
     
