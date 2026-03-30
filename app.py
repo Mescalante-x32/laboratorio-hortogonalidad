@@ -651,63 +651,76 @@ elif tema == "10. Diodo de Marcha Libre (Freewheeling)":
     st.success(f"✅ **Conclusión Pedagógica:** Observe que el voltaje de salida ya no tiene la parte negativa del módulo anterior. La corriente es más suave (menos rizado) porque el inductor descarga su energía a través del diodo de marcha libre durante todo el semiciclo negativo.")
 
 # ==========================================
-# MÓDULO 11: INDUCTANCIA DE LÍNEA (CONMUTACIÓN)
+# MÓDULO 11: INDUCTANCIA DE LÍNEA (MONOFÁSICO)
 # ==========================================
 elif tema == "11. Efecto de Inductancia de Línea":
-    st.header("Módulo 11: Efecto de la Inductancia de Línea ($L_s$)")
-    st.write("Análisis del fenómeno de conmutación y la caída de voltaje en rectificadores reales.")
+    st.header("Módulo 11: Efecto de la Inductancia de Línea ($L_s$) en Rectificador Monofásico")
+    st.write("Análisis del retraso de conmutación en la entrada del rectificador.")
 
     with st.sidebar:
         st.subheader("Parámetros del Sistema")
-        V_rms_11 = st.number_input("Voltaje Fuente [Vrms]", value=120.0)
+        Vm_11 = st.number_input("Voltaje Pico Fuente [V]", value=170.0)
         f_11 = st.number_input("Frecuencia [Hz]", value=60.0)
-        Ls_mH = st.slider("Inductancia de Línea Ls [mH]", 0.1, 10.0, 1.0, step=0.1)
-        Id_11 = st.number_input("Corriente de Carga (Suponiendo L_carga → ∞) [A]", value=10.0)
+        Ls_mH = st.slider("Inductancia de Línea Ls [mH]", 0.1, 20.0, 2.0, step=0.1)
+        R_carga = st.number_input("Resistencia de Carga [Ω]", value=20.0)
 
-    # --- Cálculos de Conmutación ---
+    # --- Cálculos de Conmutación Monofásica ---
     w11 = 2 * np.pi * f_11
     Ls = Ls_mH / 1000
-    Vm_11 = V_rms_11 * np.sqrt(2)
     
-    # Ángulo de conmutación (u) para un rectificador de onda completa (puente)
-    # cos(u) = 1 - (2 * w * Ls * Id) / Vm
-    cos_u = 1 - (2 * w11 * Ls * Id_11) / Vm_11
-    
-    # Asegurar que el argumento de arccos esté en rango [-1, 1]
-    cos_u = max(-1.0, min(1.0, cos_u))
-    u_rad = np.arccos(cos_u)
-    u_deg = np.degrees(u_rad)
-    
-    # Caída de voltaje promedio debido a Ls
-    # delta_V = (w * Ls * Id) / pi
-    delta_V = (w11 * Ls * Id_11) / np.pi
-    V_dc_ideal = (2 * Vm_11) / np.pi
-    V_dc_real = V_dc_ideal - delta_V
+    # En media onda monofásica, la corriente i(t) debe satisfacer:
+    # Ls*(di/dt) + R*i = Vm*sin(wt)
+    # La solución es i(t) = (Vm/Z) * [sin(wt - phi) + sin(phi)*exp(-t/tau)]
+    Z_s = np.sqrt(R_carga**2 + (w11*Ls)**2)
+    phi_s = np.arctan2(w11*Ls, R_carga)
+    tau_s = Ls / R_carga
 
-    # --- Visualización de Resultados ---
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Ángulo de Conmutación (u)", f"{u_deg:.2f}°")
-    c2.metric("Caída de Voltaje ΔV", f"{delta_V:.2f} V")
-    c3.metric("Vdc Real", f"{V_dc_real:.2f} V", delta=f"-{delta_V:.2f}")
+    # Cálculo del ángulo de extinción beta (donde i=0)
+    def ecuacion_i(ang):
+        return np.sin(ang - phi_s) + np.sin(phi_s) * np.exp(-ang / (w11 * tau_s))
 
-    # --- Gráficas de Conmutación ---
-    theta = np.linspace(0, np.pi, 1000)
+    busqueda = np.linspace(np.pi, 2*np.pi, 500)
+    beta_11 = np.pi
+    for a in busqueda:
+        if ecuacion_i(a) < 0:
+            beta_11 = a
+            break
+
+    theta = np.linspace(0, 2*np.pi, 1000)
     v_s = Vm_11 * np.sin(theta)
-    v_o = np.copy(v_s)
     
-    # Durante el intervalo de conmutación (0 a u), el voltaje de salida 
-    # es el promedio de las fases (en este caso simplificado v_s / 2)
-    indices_u = np.where(theta <= u_rad)[0]
-    v_o[indices_u] = v_s[indices_u] / 2 # Simplificación pedagógica del efecto de muesca (notch)
+    # Corriente y Voltaje en la Carga
+    i_s = np.zeros_like(theta)
+    v_o = np.zeros_like(theta)
+    v_ls = np.zeros_like(theta) # Voltaje en la inductancia de línea
+    
+    idx_cond = np.where(theta <= beta_11)[0]
+    i_s[idx_cond] = (Vm_11 / Z_s) * (np.sin(theta[idx_cond] - phi_s) + 
+                                     np.sin(phi_s) * np.exp(-theta[idx_cond] / (w11 * tau_s)))
+    
+    # v_o = v_s - Ls*(di/dt) -> En la carga R puramente: v_o = i_s * R_carga
+    v_o = i_s * R_carga
+    v_ls = v_s - v_o
 
-    fig12, ax12 = plt.subplots(figsize=(10, 5))
-    ax12.plot(theta, v_s, 'gray', ls='--', alpha=0.5, label="Voltaje Ideal (Sin Ls)")
-    ax12.plot(theta, v_o, 'b', lw=2, label="Voltaje Real (Con muesca de conmutación)")
-    ax12.fill_between(theta[indices_u], v_o[indices_u], v_s[indices_u], color='red', alpha=0.3, label="Área de pérdida (ΔV)")
+    # --- Resultados ---
+    V_dc_11 = (1/(2*np.pi)) * np.trapz(v_o, theta)
     
-    ax12.set_title("Efecto de la Inductancia de Línea en la Salida")
-    ax12.set_xlabel("Fase [rad]"); ax12.set_ylabel("Voltaje [V]")
-    ax12.legend(); ax12.grid(True)
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Ángulo de Extinción β", f"{np.degrees(beta_11):.2f}°")
+    c2.metric("Voltaje CD Promedio", f"{V_dc_11:.2f} V")
+    c3.metric("Caída por Ls (estimada)", f"{((Vm_11/np.pi) - V_dc_11):.2f} V")
+
+    # --- Gráficas ---
+    fig12, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+    
+    ax1.plot(theta, v_s, 'gray', ls='--', alpha=0.5, label="v_fuente(t)")
+    ax1.plot(theta, v_o, 'b', lw=2, label="v_carga(t)")
+    ax1.fill_between(theta, v_s, v_o, where=(theta<=beta_11), color='orange', alpha=0.2, label="v_Ls(t)")
+    ax1.set_ylabel("Voltaje [V]"); ax1.legend(); ax1.grid(True)
+    
+    ax2.plot(theta, i_s, 'r', lw=2, label="i_linea(t)")
+    ax2.set_ylabel("Corriente [A]"); ax2.set_xlabel("Fase [rad]"); ax2.legend(); ax2.grid(True)
+    
     st.pyplot(fig12)
 
-    st.warning(f"⚠️ **Nota Técnica:** La inductancia de línea provoca que los diodos no conmuten instantáneamente. Durante el ángulo **u = {u_deg:.1f}°**, existe un cortocircuito momentáneo entre fases a través de los diodos, lo que reduce el voltaje promedio disponible en la carga.")
+    st.info(f"💡 **Explicación para el Alumno:** Observe cómo el voltaje en la carga ($v_o$) no sube instantáneamente con la fuente. La diferencia ($v_s - v_o$) es el voltaje que 'absorbe' la inductancia de línea $L_s$ para permitir que la corriente crezca. Esto reduce el área total bajo la curva de voltaje de salida.")
