@@ -30,7 +30,8 @@ tema = st.sidebar.radio(
         "16. Puente Controlado (Carga R y RL)",
         "17. Puente Controlado (Carga R y RL)",
         "18. Bidireccionalidad de Potencia (Fuente I)",
-        "19. Bidireccionalidad de Potencia (Fuente I)-extendido"
+        "19. Bidireccionalidad de Potencia (Fuente I)-extendido",
+        "20. Efecto de la Inductancia de Línea (Ls)"
     )
 )
 
@@ -1471,4 +1472,96 @@ elif tema == "19. Bidireccionalidad de Potencia (Fuente I)-extendido":
     * Note que incluso si la carga es una fuente de corriente ideal, el convertidor consume **{Q:.1f} VAR**.
     * Esto ocurre porque el ángulo de disparo $\\alpha$ desplaza la componente fundamental de la corriente respecto al voltaje. 
     * A $\\alpha = 90^\circ$, la potencia activa es casi nula, pero el consumo de reactivos llega a su punto máximo, comportándose como un reactor inductivo para la red.
+    """)
+
+# =========================================================
+# MÓDULO 20: INDUCTANCIA DE LÍNEA Y TRASLAPE (Ls)
+# =========================================================
+elif tema == "20. Efecto de la Inductancia de Línea (Ls)":
+    st.header("Módulo 18: Fenómeno de Traslape (Overlap)")
+    st.write("Análisis de la conmutación no instantánea debido a la inductancia de red.")
+
+    with st.sidebar:
+        st.subheader("Parámetros de Red")
+        Vm_18 = st.number_input("Voltaje Pico Fuente [V]", value=170.0)
+        f_18 = st.number_input("Frecuencia [Hz]", value=60.0)
+        Ls_mH = st.number_input("Inductancia de Línea (Ls) [mH]", value=2.0, step=0.5)
+        
+        st.markdown("---")
+        st.subheader("Operación del Convertidor")
+        alpha_deg = st.slider("Ángulo de Disparo (α) [°]", 0, 90, 30)
+        Idc_val = st.number_input("Corriente de Carga Idc [A]", value=15.0)
+
+    # --- Cálculos del Traslape ---
+    w = 2 * np.pi * f_18
+    Ls = Ls_mH / 1000
+    alpha_rad = np.deg2rad(alpha_deg)
+    
+    # Cálculo del ángulo de traslape (u) para puente monofásico:
+    # cos(alpha + u) = cos(alpha) - (2 * w * Ls * Idc) / Vm
+    cos_val = np.cos(alpha_rad) - (2 * w * Ls * Idc_val) / Vm_18
+    
+    # Verificación de límite físico
+    if cos_val < -1:
+        st.error("⚠️ Ls o Idc demasiado altos: El convertidor entra en falla de conmutación.")
+        u_rad = np.pi - alpha_rad
+    else:
+        u_rad = np.arccos(cos_val) - alpha_rad
+    
+    u_deg = np.rad2deg(u_rad)
+
+    # --- Simulación de Formas de Onda ---
+    num_ciclos = 2
+    puntos = num_ciclos * 1500
+    theta = np.linspace(0, 2 * np.pi * num_ciclos, puntos)
+    v_s = Vm_18 * np.sin(theta)
+    v_out = np.zeros(puntos)
+    i_linea = np.zeros(puntos)
+
+    for i in range(puntos):
+        phi = theta[i] % np.pi
+        # Intervalo de Traslape (Conmutación)
+        if alpha_rad <= phi <= (alpha_rad + u_rad):
+            v_out[i] = 0 # En puente monofásico el voltaje cae a cero durante el traslape
+            # La corriente sube linealmente (aprox) durante el traslape
+            progreso = (phi - alpha_rad) / u_rad
+            val_i = -Idc_val + 2 * Idc_val * progreso
+            i_linea[i] = val_i if v_s[i] >= 0 else -val_i
+        # Intervalo de Conducción Normal
+        elif (alpha_rad + u_rad) < phi < np.pi:
+            v_out[i] = np.abs(v_s[i])
+            i_linea[i] = Idc_val if v_s[i] >= 0 else -Idc_val
+        else:
+            v_out[i] = -np.abs(v_s[i])
+            i_linea[i] = -Idc_val if v_s[i] >= 0 else Idc_val
+
+    # --- Métricas de Desempeño ---
+    v_dc_ideal = (2 * Vm_18 / np.pi) * np.cos(alpha_rad)
+    caida_v = (2 * w * Ls * Idc_val) / np.pi
+    v_dc_real = v_dc_ideal - caida_v
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Ángulo de Traslape (μ)", f"{u_deg:.2f}°")
+    c2.metric("Vdc con Caída", f"{v_dc_real:.2f} V")
+    c3.metric("Pérdida por Ls", f"{caida_v:.2f} V")
+
+    # --- Gráficas ---
+    fig18, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 9), sharex=True)
+    x_ciclos = theta / (2 * np.pi)
+    
+    ax1.plot(x_ciclos, v_s, 'gray', ls='--', alpha=0.3, label="v_fuente")
+    ax1.plot(x_ciclos, v_out, 'b', lw=2, label="v_salida (con Notch)")
+    ax1.fill_between(x_ciclos, v_out, 0, color='blue', alpha=0.1)
+    ax1.set_ylabel("Voltaje [V]"); ax1.legend(); ax1.grid(True)
+    
+    ax2.plot(x_ciclos, i_linea, 'r', lw=2, label="i_línea (con rampa)")
+    ax2.set_ylabel("Corriente [A]"); ax2.set_xlabel("Ciclos"); ax2.legend(); ax2.grid(True)
+    
+    st.pyplot(fig18)
+
+    st.info(f"""
+    **Observaciones sobre el Traslape:**
+    * **Muescas de Voltaje (Notches):** Note las caídas a cero en el voltaje de salida justo en el momento del disparo. Esto ensucia el voltaje que ven otras cargas en el PCC (Point of Common Coupling).
+    * **Pendiente de Corriente:** La corriente de línea ya no es una onda cuadrada perfecta; ahora tiene una rampa finita definida por $L_s$.
+    * **Regulación:** A mayor corriente de carga ($I_{{dc}}$) o mayor inductancia ($L_s$), el área perdida de voltaje aumenta, reduciendo el $V_{{dc}}$ real.
     """)
