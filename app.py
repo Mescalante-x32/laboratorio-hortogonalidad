@@ -36,7 +36,8 @@ tema = st.sidebar.radio(
         "22. Calidad en Sistemas Trifásicos",
         "23. Rectificadores Multi-pulso",
         "24. Autoevaluación: Sistemas Multi-pulso",
-        "25. Traslape en Sistemas Trifásicos"
+        "25. Traslape en Sistemas Trifásicos",
+        "26. Troceadores y Cuadrantes de Operación"
     )
 )
 
@@ -2016,3 +2017,65 @@ elif tema == "25. Traslape en Sistemas Trifásicos":
     2. **Caída de Tensión:** La caída de tensión NO es resistiva ($I^2R$), sino proporcional a la frecuencia y a la inductancia.
     3. **Límite de Inversión:** En modo inversor ($\\alpha > 90^\circ$), el traslape es crítico, ya que si $\\alpha + \\mu > 180^\circ$, ocurre una **falla de conmutación** catastrófica.
     """)
+
+# =========================================================
+# MÓDULO 26: TROCEADORES ELEMENTALES POR CUADRANTES
+# =========================================================
+elif tema == "26. Troceadores y Cuadrantes de Operación":
+    st.header("Módulo 24: Clasificación de Troceadores (Choppers)")
+    st.write("Análisis de convertidores CD-CD según su capacidad de manejo de potencia.")
+
+    with st.sidebar:
+        st.subheader("Configuración de Máquina CD")
+        V_dc = st.number_input("Voltaje de Fuente (Vdc) [V]", value=200.0)
+        f_sw = st.number_input("Frecuencia Conmutación [Hz]", value=1000.0)
+        D = st.slider("Ciclo de Trabajo (D)", 0.0, 1.0, 0.5)
+        
+        st.markdown("---")
+        tipo_chopper = st.selectbox("Clase de Troceador:", 
+            ["Clase A (1 Cuadrante - Reductor)", 
+             "Clase B (1 Cuadrante - Regenerativo)",
+             "Clase C (2 Cuadrantes - Reversible en I)",
+             "Clase D (2 Cuadrantes - Reversible en V)",
+             "Clase E (4 Cuadrantes - Puente Completo)"])
+
+    # --- Lógica de Simulación ---
+    t = np.linspace(0, 3/f_sw, 1000)
+    pwm = (t % (1/f_sw)) < (D/f_sw)
+    
+    # Definición de comportamiento por Clase
+    if "Clase A" in tipo_chopper:
+        v_out = V_dc * pwm
+        desc = "Operación en el 1er Cuadrante: Motor en marcha directa. V > 0, I > 0."
+    elif "Clase B" in tipo_chopper:
+        v_out = V_dc * (1 - pwm) # Simplificación para visualización
+        desc = "Operación en el 2do Cuadrante: Frenado regenerativo. V > 0, I < 0."
+    elif "Clase C" in tipo_chopper:
+        v_out = V_dc * pwm
+        desc = "Combinación A+B: Permite marcha y frenado (Tracción eléctrica)."
+    else:
+        v_out = V_dc * (2*pwm - 1)
+        desc = "Multicuadrante: Control total de velocidad y sentido."
+
+    # --- Visualización ---
+    st.subheader(desc)
+    
+    fig24, ax = plt.subplots(figsize=(10, 4))
+    ax.plot(t*1000, v_out, 'g', lw=2, label="v_salida(t)")
+    ax.set_ylabel("Voltaje [V]"); ax.set_xlabel("Tiempo [ms]")
+    ax.grid(True, alpha=0.3); ax.legend()
+    st.pyplot(fig24)
+
+    # --- Diagrama de Cuadrantes (Matplotlib) ---
+    fig_q, ax_q = plt.subplots(figsize=(4, 4))
+    ax_q.axhline(0, color='black'); ax_q.axvline(0, color='black')
+    ax_q.set_xlim(-1, 1); ax_q.set_ylim(-1, 1)
+    ax_q.set_xlabel("Corriente (Io)"); ax_q.set_ylabel("Voltaje (Vo)")
+    
+    # Resaltar cuadrante activo
+    if "Clase A" in tipo_chopper: rect = plt.Rectangle((0,0), 1, 1, color='green', alpha=0.3)
+    elif "Clase B" in tipo_chopper: rect = plt.Rectangle((-1,0), 1, 1, color='orange', alpha=0.3)
+    elif "Clase C" in tipo_chopper: rect = plt.Rectangle((-1,0), 2, 1, color='blue', alpha=0.3)
+    
+    ax_q.add_patch(rect)
+    st.sidebar.pyplot(fig_q)
