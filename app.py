@@ -2261,97 +2261,123 @@ elif tema == "28. Troceador Clase B (Regenerativo)":
     """)
 
 # =========================================================
-# MÓDULO 29: TROCEADOR CLASE C (DOS CUADRANTES)
+# MÓDULO 29: TROCEADOR CLASE C (TRACCIÓN Y REGENERACIÓN)
 # =========================================================
 elif tema == "29. Troceador Clase C: Tracción y Frenado":
-    st.header("Módulo 27: Control de Dos Cuadrantes (Clase C)")
-    st.write("Simulación de un medio puente para control bidireccional de corriente.")
+    st.header("Módulo 27: Control Bidireccional de Corriente")
+    st.write("Simulación de un brazo de fase con conmutación complementaria.")
 
+    # --- ESQUEMÁTICO Y TEORÍA ---
+    with st.expander("🔌 Ver Esquema del Circuito y Lógica de Control", expanded=False):
+        col_esq, col_txt = st.columns([1, 1])
+        with col_esq:
+            st.markdown("""
+            **Topología de Medio Puente:**
+            ```text
+            Vdc (+) ----+-----------+
+                        |           |
+                      [Q1]        (D1)  <-- Brazo Superior
+                        |           |
+            Vo (Polo) --+-----------+--- (La) -- (Ra) -- (E) --- Vdc (-)
+                        |           |
+                      [Q2]        (D2)  <-- Brazo Inferior
+                        |           |
+            Vdc (-) ----+-----------+
+            ```
+            """)
+        with col_txt:
+            st.info("""
+            **Estrategia Complementaria:**
+            * **Q1 ON / Q2 OFF:** Vo = Vdc
+            * **Q1 OFF / Q2 ON:** Vo = 0
+            * El voltaje promedio es **Va = D * Vdc**.
+            * La corriente **Ia** decide el cuadrante según la FEM (**E**).
+            """)
+
+    # --- PARÁMETROS EN SIDEBAR ---
     with st.sidebar:
-        st.subheader("Parámetros de Operación")
-        V_dc = st.number_input("Voltaje de Bus CD [V]", value=240.0)
-        f_sw_27 = st.number_input("Frecuencia PWM [Hz]", value=3000.0, key="fsw27")
-        D = st.slider("Ciclo de Trabajo (D)", 0.05, 0.95, 0.5)
+        st.subheader("Configuración del Drive")
+        V_dc_27 = st.number_input("Voltaje Bus CD [V]", value=200.0, key="v_dc_27")
+        f_sw_27 = st.number_input("Frecuencia PWM [Hz]", value=2000.0, key="f_sw_27")
+        D_27 = st.slider("Ciclo de Trabajo (D)", 0.0, 1.0, 0.5, key="d_27")
         
         st.markdown("---")
-        st.subheader("Dinámica de la Máquina")
-        E_emf = st.number_input("FEM del Motor (E) [V]", value=120.0)
-        La_mH = st.number_input("Inductancia La [mH]", value=10.0)
-        Ra = st.number_input("Resistencia Ra [Ω]", value=0.4)
+        st.subheader("Modelo de la Carga (Motor)")
+        E_27 = st.number_input("FEM del Motor (E) [V]", value=120.0, key="e_27")
+        La_27 = st.number_input("Inductancia [mH]", value=10.0, key="la_27")
+        Ra_27 = st.number_input("Resistencia [Ω]", value=0.5, key="ra_27")
 
-    # --- Cálculos de Estado Estacionario ---
-    T = 1 / f_sw_27
-    L = La_mH / 1000
-    Va_avg = D * V_dc
+    # --- CÁLCULOS TÉCNICOS ---
+    T_27 = 1 / f_sw_27
+    L_27 = La_27 / 1000
+    Va_avg = D_27 * V_dc_27
     
-    # Ecuación fundamental: Va_avg = E + Ra*Ia
-    # Si Va_avg > E -> Ia es (+) MODO MOTOR
-    # Si Va_avg < E -> Ia es (-) MODO GENERADOR
-    Ia_avg = (Va_avg - E_emf) / Ra
+    # Punto de equilibrio dinámico
+    D_crit = E_27 / V_dc_27 if V_dc_27 > 0 else 0.0
     
-    # Potencia en el eje (Conversión Electromecánica)
-    P_conv = E_emf * Ia_avg
-    # Potencia en la fuente (Bus CD)
-    P_bus = Va_avg * Ia_avg
-
-    # --- Métricas de Cuadrante ---
-    st.subheader("📊 Estado de Operación")
+    # Corriente promedio e Índices
+    Ia_avg = (Va_avg - E_27) / Ra_27
+    P_bus = Va_avg * Ia_avg      # Potencia en terminales (neta)
+    P_conv = E_27 * Ia_avg       # Potencia convertida (mecánica)
+    P_loss = (Ia_avg**2) * Ra_27 # Pérdidas Joule
+    
+    # --- INTERFAZ DE RESULTADOS ---
+    st.subheader("📊 Estado del Sistema")
     c1, c2, c3 = st.columns(3)
     
-    if Ia_avg >= 0:
-        c1.success("Modo: MOTOR (Tracción)")
-        flujo = "Fuente ➔ Motor"
+    # Lógica de Cuadrante
+    if Ia_avg > 0.1:
+        c1.success("Cuadrante I: MOTOR")
+        status = "Consumiendo Energía"
+    elif Ia_avg < -0.1:
+        c1.warning("Cuadrante II: GENERADOR")
+        status = "Recuperando Energía"
     else:
-        c1.warning("Modo: GENERADOR (Frenado)")
-        flujo = "Motor ➔ Fuente"
+        c1.info("Estado: Equilibrio (Ia ≈ 0)")
+        status = "Sin flujo neto"
 
-    c2.metric("Corriente Ia", f"{Ia_avg:.2f} A")
-    c3.metric("Flujo de Potencia", flujo)
+    c2.metric("Corriente Ia", f"{Ia_avg:.2f} A", delta=f"D_crit: {D_crit:.2f}")
+    c3.metric("P. Convertida", f"{P_conv:.1f} W", help="Potencia disponible en el eje")
 
-    # --- Simulación Temporal ---
-    t_sim = np.linspace(0, 2*T, 1500)
-    v_pole = np.where((t_sim % T) < D*T, V_dc, 0) # Voltaje de polo
+    # --- SIMULACIÓN TEMPORAL ---
+    t_sim = np.linspace(0, 2*T_27, 2000)
+    # Voltaje de polo ideal (sin tiempo muerto)
+    v_pole = np.where((t_sim % T_27) < D_27*T_27, V_dc_27, 0)
     
-    # Rizado
-    delta_i = (V_dc * D * (1-D) * T) / L
+    # Rizado aproximado
+    delta_i = (V_dc_27 * D_27 * (1 - D_27) * T_27) / L_27
     i_sim = np.zeros_like(t_sim)
     curr = Ia_avg - (delta_i / 2)
     
     for i in range(1, len(t_sim)):
         dt = t_sim[i] - t_sim[i-1]
-        di = (v_pole[i] - Ra * curr - E_emf) / L * dt
+        di = (v_pole[i] - Ra_27 * curr - E_27) / L_27 * dt
         curr += di
-        i_sim[i] = curr # Aquí la corriente SÍ puede ser negativa (Clase C)
+        i_sim[i] = curr # En Clase C, Ia cruza el cero libremente
 
-    # --- Gráficas ---
+    # --- GRÁFICAS ---
     fig27, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
     
-    ax1.plot(t_sim*1000, v_pole, 'b', lw=1.5, label="v_terminal(t)")
-    ax1.axhline(E_emf, color='r', ls='--', alpha=0.6, label="E (FEM)")
-    ax1.set_ylabel("Voltaje [V]"); ax1.grid(True, alpha=0.3); ax1.legend()
+    # Voltajes
+    ax1.plot(t_sim*1000, v_pole, 'b', alpha=0.7, label="v_terminal(t)")
+    ax1.axhline(E_27, color='r', ls='--', label="E (FEM)")
+    ax1.axhline(Va_avg, color='orange', lw=2, label=f"Va_avg ({Va_avg}V)")
+    ax1.set_ylabel("Voltaje [V]"); ax1.legend(loc='upper right'); ax1.grid(True, alpha=0.3)
+    ax1.set_title(f"Dinámica del Brazo de Fase (D={D_27:.2f}, D_crit={D_crit:.2f})")
     
-    ax2.plot(t_sim*1000, i_sim, 'darkgreen' if Ia_avg >= 0 else 'darkred', lw=2)
+    # Corriente
+    color_i = 'darkgreen' if Ia_avg >= 0 else 'darkred'
+    ax2.plot(t_sim*1000, i_sim, color_i, lw=2, label="i_armadura(t)")
     ax2.axhline(0, color='black', lw=1)
+    ax2.fill_between(t_sim*1000, i_sim, 0, color=color_i, alpha=0.1)
     ax2.set_ylabel("Corriente Ia [A]"); ax2.set_xlabel("Tiempo [ms]"); ax2.grid(True, alpha=0.3)
-    ax2.set_title(f"Corriente en la Armadura (Promedio: {Ia_avg:.2f} A)")
     
     st.pyplot(fig27)
 
-    # --- Resumen de Potencia para el Estudiante ---
-    st.markdown("---")
-    st.write("### 🔍 Análisis de Potencia")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.write(f"**Potencia de Bus ($P_{{bus}}$):** {P_bus:.1f} W")
-        st.caption("Positiva: Consume de la red. Negativa: Devuelve a la red.")
-    with col2:
-        st.write(f"**Potencia Convertida ($P_{{conv}}$):** {P_conv:.1f} W")
-        st.caption("Positiva: Torque motor. Negativa: Torque de frenado.")
-
-    st.info("""
-    **Observación Pedagógica:**
-    Note que el ciclo de trabajo **D** controla directamente el voltaje promedio. 
-    * Si $D > E/V_{dc}$, la corriente sube y el motor acelera.
-    * Si $D < E/V_{dc}$, la corriente se vuelve negativa y el sistema recupera energía.
-    ¡Esta es la base del control de torque en la industria!
+    # --- ANÁLISIS DOCENTE ---
+    st.info(f"""
+    **Observación didáctica:**
+    * El punto donde la corriente se invierte es $D = {D_crit:.2f}$. 
+    * Actualmente, con $D = {D_27:.2f}$, el sistema está en modo **{status}**.
+    * Si usted ajusta el slider de **D** por debajo de **{D_crit:.2f}**, verá cómo la corriente se vuelve negativa automáticamente sin cambiar ninguna conexión física.
     """)
