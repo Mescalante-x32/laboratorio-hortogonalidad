@@ -32,7 +32,8 @@ tema = st.sidebar.radio(
         "18. Bidireccionalidad de Potencia (Fuente I)",
         "19. Bidireccionalidad de Potencia (Fuente I)-extendido",
         "20. Efecto de la Inductancia de Línea (Ls)",
-        "21. Rectificador Trifásico (6 Pulsos)"
+        "21. Rectificador Trifásico (6 Pulsos)",
+        "22. Calidad en Sistemas Trifásicos"
     )
 )
 
@@ -1670,3 +1671,95 @@ elif tema == "21. Rectificador Trifásico (6 Pulsos)":
     st.pyplot(fig19)
 
     st.latex(r"V_{dc} = \frac{3 \sqrt{2} V_{L-L,rms}}{\pi} \cos \alpha")
+
+# =========================================================
+# MÓDULO 22: CALIDAD DE ENERGÍA TRIFÁSICA (6 PULSOS)
+# =========================================================
+elif tema == "22. Calidad en Sistemas Trifásicos":
+    st.header("Módulo 20: Índices de Desempeño en 6 Pulsos")
+    st.write("Análisis armónico y de potencia reactiva para aplicaciones industriales.")
+
+    with st.sidebar:
+        st.subheader("Configuración de Red")
+        Vll_rms = st.number_input("Voltaje Línea-Línea [Vrms]", value=220.0)
+        f_20 = st.number_input("Frecuencia [Hz]", value=60.0)
+        alpha_deg = st.slider("Ángulo de Disparo (α) [°]", 0, 120, 30)
+        Idc_20 = st.number_input("Corriente CD Constante [A]", value=50.0)
+
+    # --- Generación de Señales ---
+    w = 2 * np.pi * f_20
+    alpha_rad = np.deg2rad(alpha_deg)
+    Vm_linea = Vll_rms * np.sqrt(2)
+    Vm_fase = Vm_linea / np.sqrt(3)
+    
+    num_ciclos = 4
+    puntos = num_ciclos * 2048
+    theta = np.linspace(0, 2 * np.pi * num_ciclos, puntos)
+    
+    # Voltaje de Fase A (Referencia para FP y Reactivos)
+    va = Vm_fase * np.sin(theta)
+    
+    # Generación de i_a (Bloques de 120°)
+    # La corriente i_a está centrada en el voltaje de fase, desplazada por alpha
+    i_a = np.zeros(puntos)
+    offset = np.pi/6 # 30 grados de desfase natural entre fase y línea
+    
+    for i in range(puntos):
+        phi = (theta[i] - offset) % (2*np.pi)
+        if alpha_rad <= phi < alpha_rad + 2*np.pi/3:
+            i_a[i] = Idc_20
+        elif alpha_rad + np.pi <= phi < alpha_rad + 5*np.pi/3:
+            i_a[i] = -Idc_20
+
+    # --- Análisis de Fourier (FFT) ---
+    ciclo_inicio = int(puntos * (num_ciclos - 1) / num_ciclos)
+    i_sample = i_a[ciclo_inicio:]
+    fft_vals = np.fft.rfft(i_sample)
+    fft_mag = np.abs(fft_vals) * 2 / len(i_sample)
+    
+    i1_rms = fft_mag[1] / np.sqrt(2)
+    i_total_rms = np.sqrt(np.mean(i_sample**2))
+    thd_i = np.sqrt(np.sum(fft_mag[2:]**2)) / fft_mag[1] * 100
+    
+    # --- Potencias Trifásicas ---
+    # P = sqrt(3) * Vll_rms * I1_rms * cos(alpha)
+    P_tri = np.sqrt(3) * Vll_rms * i1_rms * np.cos(alpha_rad)
+    # Q = sqrt(3) * Vll_rms * I1_rms * sen(alpha)
+    Q_tri = np.sqrt(3) * Vll_rms * i1_rms * np.abs(np.sin(alpha_rad))
+    S_tri = np.sqrt(3) * Vll_rms * i_total_rms
+    fp_tri = P_tri / S_tri
+
+    # --- Métricas ---
+    st.subheader("📊 Resultados de Calidad de Energía")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Potencia Activa (P)", f"{P_tri/1000:.2f} kW")
+    c2.metric("Potencia Reactiva (Q)", f"{Q_tri/1000:.2f} kVAR")
+    c3.metric("THD Corriente", f"{thd_i:.2f} %")
+    c4.metric("Factor Potencia", f"{fp_tri:.3f}")
+
+    # --- Gráficas ---
+    fig20, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 10))
+    plt.subplots_adjust(hspace=0.4)
+    
+    # Temporal: Voltaje Fase A vs Corriente Fase A
+    x_c = theta / (2 * np.pi)
+    ax1.plot(x_c, va/Vm_fase, 'gray', ls='--', alpha=0.4, label="v_fase_a (pu)")
+    ax1.plot(x_c, i_a/Idc_20, 'r', lw=2, label="i_línea_a (pu)")
+    ax1.set_title("Relación de Fase y Desplazamiento")
+    ax1.set_xlabel("Ciclos"); ax1.grid(True); ax1.legend()
+    
+    # Espectro: Solo impares no múltiplos de 3 (5, 7, 11, 13...)
+    h_idx = [1, 5, 7, 11, 13]
+    h_mags = [fft_mag[h] for h in h_idx]
+    ax2.bar([str(h) for h in h_idx], h_mags, color='teal')
+    ax2.set_title("Espectro Armónico (Armónicos Dominantes)")
+    ax2.set_ylabel("Amplitud [A]"); ax2.set_xlabel("Orden del Armónico")
+    
+    st.pyplot(fig20)
+
+    st.info("""
+    **Puntos para Discusión en Clase:**
+    1. **Cancelación de Armónicos Triplen:** Observe que el 3er armónico es prácticamente cero. Esta es la mayor ventaja del sistema trifásico.
+    2. **THD Teórico:** En un puente de 6 pulsos ideal, el THD de corriente es de aproximadamente 31%, comparado con el 48% del monofásico.
+    3. **Reactivos en Alta Potencia:** Note cómo el valor de **Q** aumenta proporcionalmente a la potencia del sistema. En la industria, esto justifica el uso de bancos de capacitores o compensadores estáticos (SVC) junto a los rectificadores.
+    """)
