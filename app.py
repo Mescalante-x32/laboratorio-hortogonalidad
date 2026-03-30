@@ -34,7 +34,8 @@ tema = st.sidebar.radio(
         "20. Efecto de la Inductancia de Línea (Ls)",
         "21. Rectificador Trifásico (6 Pulsos)",
         "22. Calidad en Sistemas Trifásicos",
-        "23. Rectificadores Multi-pulso"
+        "23. Rectificadores Multi-pulso",
+        "24. Autoevaluación: Sistemas Multi-pulso"
     )
 )
 
@@ -1857,3 +1858,85 @@ elif tema == "23. Rectificadores Multi-pulso":
     2. **Calidad CD:** El rizado de voltaje es casi imperceptible, con una frecuencia fundamental de {60*n_pulsos} Hz.
     3. **Aplicación:** Esta configuración reduce drásticamente la necesidad de filtros de armónicos pesados en la red.
     """)
+
+# =========================================================
+# MÓDULO 24: AUTOEVALUACIÓN Y FORMULARIO (MULTI-PULSO)
+# =========================================================
+elif tema == "24. Autoevaluación: Sistemas Multi-pulso":
+    st.header("Módulo 22: Consolidación de Rectificación de Potencia")
+    st.write("Resumen técnico y evaluación sobre sistemas de n-pulsos y calidad de energía.")
+
+    # --- Formulario Técnico Avanzado ---
+    st.subheader("📓 Formulario de Alta Potencia")
+    with st.expander("Ver Fórmulas de Sistemas Trifásicos y Multi-pulso"):
+        st.markdown(r"""
+        ### 1. Puente de Graetz (6 Pulsos)
+        * **Voltaje CD Promedio:** $V_{dc} = \frac{3 \sqrt{2} V_{LL,rms}}{\pi} \cos \alpha \approx 1.35 V_{LL,rms} \cos \alpha$
+        * **Voltaje CD con Traslape ($L_s$):** $V_{dc} = \frac{3 \sqrt{2} V_{LL,rms}}{\pi} \cos \alpha - \frac{3 \omega L_s I_{dc}}{\pi}$
+        * **Armónicos de Corriente presentes:** $h = 6k \pm 1$ (5, 7, 11, 13...)
+        
+        ### 2. Sistemas de n-Pulsos
+        * **Ángulo de desfase necesario entre puentes:** $\phi = \frac{60^\circ}{m}$ (donde $m$ es el número de puentes de 6 pulsos).
+        * **Armónicos en el primario:** $h = nk \pm 1$ (ej. para 12 pulsos: 11, 13, 23, 25...).
+        * **Frecuencia del rizado de salida:** $f_{ripple} = n \cdot f_{red}$
+        
+        ### 3. Potencia y Reactivos
+        * **Potencia Activa Trifásica:** $P = \sqrt{3} V_{LL,rms} I_{1,rms} \cos \alpha$
+        * **Potencia Reactiva Trifásica:** $Q = \sqrt{3} V_{LL,rms} I_{1,rms} \sin \alpha$
+        * **Factor de Potencia (FP):** $FP = \frac{3}{\pi} \cos \alpha$ (para 6 pulsos ideal).
+        """)
+
+    st.markdown("---")
+    st.subheader("📝 Quiz de Verificación")
+
+    # --- Estructura del Quiz ---
+    preguntas_adv = [
+        {
+            "id": 1,
+            "pregunta": "¿Cuál es el desfase eléctrico requerido entre los secundarios de un transformador para un sistema de 12 pulsos?",
+            "opciones": ["15°", "30°", "60°", "0°"],
+            "correcta": 1,
+            "explicacion": "Para 12 pulsos se requieren dos puentes de 6 pulsos desfasados 30° (60°/2) para cancelar los armónicos 5 y 7."
+        },
+        {
+            "id": 2,
+            "pregunta": "En un rectificador de 6 pulsos, ¿qué sucede con el factor de potencia si el ángulo de disparo (alpha) aumenta?",
+            "opciones": [
+                "El FP mejora porque se reduce la distorsión.",
+                "El FP empeora debido al incremento del desplazamiento (cos alpha).",
+                "El FP permanece constante.",
+                "El FP se vuelve unitario a los 90°."
+            ],
+            "correcta": 1,
+            "explicacion": "El FP depende tanto de la distorsión como del desplazamiento. Al aumentar alpha, el desplazamiento aumenta, reduciendo el FP significativamente."
+        },
+        {
+            "id": 3,
+            "pregunta": "¿Cuál es el primer armónico de corriente que aparece en el primario de un rectificador de 18 pulsos?",
+            "opciones": ["5to", "11vo", "17vo", "23vo"],
+            "correcta": 2,
+            "explicacion": "Siguiendo la regla h = nk ± 1, para n=18, los primeros armónicos son 18-1=17 y 18+1=19."
+        },
+        {
+            "id": 4,
+            "pregunta": "El fenómeno de traslape (overlap) causado por Ls provoca que el voltaje CD promedio:",
+            "opciones": ["Aumente ligeramente.", "Se mantenga igual.", "Disminuya.", "Se vuelva puramente senoidal."],
+            "correcta": 2,
+            "explicacion": "El traslape 'roba' área al voltaje de salida durante la conmutación, lo que resulta en una caída del valor promedio Vdc."
+        }
+    ]
+
+    # --- Lógica de Interfaz ---
+    for p in preguntas_adv:
+        st.markdown(f"**{p['id']}. {p['pregunta']}**")
+        resp = st.radio(f"Seleccione su respuesta ({p['id']}):", p['opciones'], key=f"adv_q{p['id']}")
+        
+        if st.button(f"Comprobar {p['id']}", key=f"adv_btn{p['id']}"):
+            idx_resp = p['opciones'].index(resp)
+            if idx_resp == p['correcta']:
+                st.success(f"¡Excelente! {p['explicacion']}")
+            else:
+                st.error(f"Siga analizando. {p['explicacion']}")
+        st.markdown("---")
+
+    st.info("💡 **Consejo Académico:** Utilice este módulo para que los alumnos verifiquen la relación entre el número de pulsos y la pureza de la corriente antes de pasar a los convertidores CD-CD.")
