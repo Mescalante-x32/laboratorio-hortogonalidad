@@ -832,91 +832,94 @@ elif tema == "12. Onda Completa con Filtro C y Ls":
     st.info(f"💡 **Sugerencia para clase:** Pida a los estudiantes que simulen 20 ciclos con una **C** muy grande para ver cuánto tarda el sistema en alcanzar el régimen permanente (tiempo de asentamiento).")
 
 # =========================================================
-# MÓDULO 13 CORREGIDO: FILTRO L-C (AUTÓNOMO)
+# MÓDULO 13: ONDA COMPLETA L-C (CON MÉTRICAS)
 # =========================================================
 elif tema == "13. Onda Completa con Filtro L-C":
     st.header("Módulo 13: Rectificador con Filtro L-C")
-    st.write("Visualización de la corriente de red (CA) y corriente de filtrado (CD).")
+    st.write("Análisis de filtrado y desempeño en régimen permanente.")
 
     with st.sidebar:
         st.subheader("Parámetros del Sistema")
-        Vm_13 = st.number_input("Voltaje Pico Fuente [V]", value=170.0, key="v13_fix")
-        f_13 = st.number_input("Frecuencia [Hz]", value=60.0, key="f13_fix")
-        num_ciclos_13 = st.slider("Ciclos a simular", 2, 20, 6, key="n13_fix")
+        Vm_13 = st.number_input("Voltaje Pico Fuente [V]", value=170.0, key="v13_m")
+        f_13 = st.number_input("Frecuencia [Hz]", value=60.0, key="f13_m")
+        num_ciclos_13 = st.slider("Ciclos a simular", 2, 20, 8, key="n13_m")
         
         st.markdown("---")
-        st.subheader("Filtro L-C")
-        Lf_mH = st.number_input("Inductancia Filtro (Lf) [mH]", value=50.0, step=5.0, key="lf13_fix")
-        Cf_uF = st.number_input("Capacitancia Filtro (Cf) [µF]", value=1000.0, step=100.0, key="cf13_fix")
-        R_13 = st.number_input("Resistencia Carga [Ω]", value=25.0, key="r13_fix")
+        st.subheader("Componentes del Filtro")
+        Lf_mH = st.number_input("Inductancia Filtro (Lf) [mH]", value=100.0, step=10.0, key="lf13_m")
+        Cf_uF = st.number_input("Capacitancia Filtro (Cf) [µF]", value=470.0, step=50.0, key="cf13_m")
+        R_13 = st.number_input("Resistencia Carga [Ω]", value=50.0, key="r13_m")
 
-    # --- Simulación Numérica Robusta ---
+    # --- Simulación ---
     w = 2 * np.pi * f_13
     Lf = Lf_mH / 1000
     Cf = Cf_uF * 1e-6
-    
-    # Alta resolución para evitar inestabilidad (1500 puntos por ciclo)
-    puntos = num_ciclos_13 * 1500
+    puntos = num_ciclos_13 * 1200
     theta = np.linspace(0, 2 * np.pi * num_ciclos_13, puntos)
     dt = (theta[1] - theta[0]) / w
     
     v_s = Vm_13 * np.sin(theta)
     v_s_abs = np.abs(v_s)
     v_out = np.zeros(puntos)
-    i_f = np.zeros(puntos)  # Corriente en el inductor (Rectificada)
-    i_in = np.zeros(puntos) # Corriente de entrada (CA)
+    i_f = np.zeros(puntos)
+    i_in = np.zeros(puntos)
     
     v_c_val = 0.0
     i_l_val = 0.0
     
     for i in range(1, puntos):
         i_load = v_c_val / R_13
-        
-        # Condición de conducción del puente de diodos
         if v_s_abs[i] > v_c_val or i_l_val > 1e-4:
-            # diL/dt = (V_rect - V_cap) / Lf
             di_l = ((v_s_abs[i] - v_c_val) / Lf) * dt
             i_l_val += di_l
             if i_l_val < 0: i_l_val = 0
-            
-            # dvC/dt = (i_L - i_load) / Cf
             dv_c = ((i_l_val - i_load) / Cf) * dt
             v_c_val += dv_c
         else:
-            # Ambos diodos bloqueados: descarga de C en R
             i_l_val = 0
             dv_c = (-i_load / Cf) * dt
             v_c_val += dv_c
-            
         v_out[i] = v_c_val
         i_f[i] = i_l_val
-        # Asignación de corriente de entrada CA
         i_in[i] = i_l_val if v_s[i] >= 0 else -i_l_val
 
+    # --- Cálculo de Parámetros de Desempeño (Último Ciclo) ---
+    ultimo_ciclo_idx = int(puntos * (num_ciclos_13 - 1) / num_ciclos_13)
+    v_segmento = v_out[ultimo_ciclo_idx:]
+    v_avg = np.mean(v_segmento)
+    v_max = np.max(v_segmento)
+    v_min = np.min(v_segmento)
+    v_ripple = v_max - v_min
+    factor_rizado = (v_ripple / v_avg) * 100 if v_avg > 0 else 0
+    
+    # Inductancia Crítica Teórica Lc = R / (3w)
+    Lc_teorica = (R_13 / (3 * w)) * 1000 # en mH
+
+    # --- Interfaz de Resultados ---
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Vdc Promedio", f"{v_avg:.2f} V")
+    c2.metric("Rizado ΔV", f"{v_ripple:.2f} V")
+    c3.metric("Factor Rizado", f"{factor_rizado:.2f} %")
+    c4.metric("Lc Crítica", f"{Lc_teorica:.1f} mH")
+
     # --- Gráficas ---
-    fig14, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(10, 11), sharex=True)
-    plt.subplots_adjust(hspace=0.3)
+    fig14, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(10, 10), sharex=True)
+    plt.subplots_adjust(hspace=0.35)
     x_ciclos = theta / (2 * np.pi)
     
-    # 1. Voltajes
-    ax1.plot(x_ciclos, v_s, 'gray', ls='--', alpha=0.3, label="v_fuente(t)")
-    ax1.plot(x_ciclos, v_out, 'b', lw=2, label="v_carga(t)")
+    ax1.plot(x_ciclos, v_s, 'gray', ls='--', alpha=0.3, label="v_fuente")
+    ax1.plot(x_ciclos, v_out, 'b', lw=2, label="v_carga")
     ax1.set_ylabel("Voltaje [V]"); ax1.legend(loc='upper right'); ax1.grid(True)
-    ax1.set_title("Resultados del Filtro L-C")
     
-    # 2. Corriente en el Inductor (Salida del puente)
-    ax2.plot(x_ciclos, i_f, 'g', lw=2, label="i_inductor (Filtro CD)")
-    ax2.fill_between(x_ciclos, i_f, 0, color='green', alpha=0.1)
+    ax2.plot(x_ciclos, i_f, 'g', lw=2, label="i_inductor (Filtro)")
     ax2.set_ylabel("i_L [A]"); ax2.legend(loc='upper right'); ax2.grid(True)
     
-    # 3. Corriente de Entrada (Desde la Red CA)
-    ax3.plot(x_ciclos, i_in, 'r', lw=2, label="i_entrada (Red CA)")
-    ax3.axhline(0, color='black', lw=1)
+    ax3.plot(x_ciclos, i_in, 'r', lw=2, label="i_entrada (Red)")
     ax3.set_ylabel("i_in [A]"); ax3.set_xlabel("Ciclos"); ax3.legend(loc='upper right'); ax3.grid(True)
     
     st.pyplot(fig14)
 
-    # Métricas de estado estable
-    ultimo_ciclo = int(puntos * (num_ciclos_13 - 1) / num_ciclos_13)
-    v_avg = np.mean(v_out[ultimo_ciclo:])
-    st.metric("Voltaje CD Promedio Final", f"{v_avg:.2f} V")
+    if Lf_mH < Lc_teorica:
+        st.warning(f"⚠️ **Conducción Discontinua:** La inductancia actual ({Lf_mH} mH) es menor a la crítica ({Lc_teorica:.1f} mH). La corriente i_L llega a cero, lo que aumenta el rizado y degrada la regulación.")
+    else:
+        st.success(f"✅ **Conducción Continua:** El filtro opera correctamente por encima de la inductancia crítica.")
