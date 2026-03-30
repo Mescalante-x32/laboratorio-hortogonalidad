@@ -33,7 +33,8 @@ tema = st.sidebar.radio(
         "19. Bidireccionalidad de Potencia (Fuente I)-extendido",
         "20. Efecto de la Inductancia de Línea (Ls)",
         "21. Rectificador Trifásico (6 Pulsos)",
-        "22. Calidad en Sistemas Trifásicos"
+        "22. Calidad en Sistemas Trifásicos",
+        "23. Rectificadores Multi-pulso"
     )
 )
 
@@ -1762,4 +1763,97 @@ elif tema == "22. Calidad en Sistemas Trifásicos":
     1. **Cancelación de Armónicos Triplen:** Observe que el 3er armónico es prácticamente cero. Esta es la mayor ventaja del sistema trifásico.
     2. **THD Teórico:** En un puente de 6 pulsos ideal, el THD de corriente es de aproximadamente 31%, comparado con el 48% del monofásico.
     3. **Reactivos en Alta Potencia:** Note cómo el valor de **Q** aumenta proporcionalmente a la potencia del sistema. En la industria, esto justifica el uso de bancos de capacitores o compensadores estáticos (SVC) junto a los rectificadores.
+    """)
+
+# =========================================================
+# MÓDULO 23: RECTIFICADORES DE MULTI-PULSO (6, 12, 18, 24)
+# =========================================================
+elif tema == "23. Rectificadores Multi-pulso":
+    st.header("Módulo 21: Rectificadores de n-Pulsos")
+    st.write("Estudio de la cancelación de armónicos mediante desfase de transformadores.")
+
+    with st.sidebar:
+        st.subheader("Configuración de Pulsos")
+        n_pulsos = st.selectbox("Número de pulsos (n):", [6, 12, 18, 24])
+        Vll_rms = st.number_input("Voltaje Línea-Línea [Vrms]", value=440.0)
+        alpha_deg = st.slider("Ángulo de Disparo (α) [°]", 0, 90, 15)
+        Idc_total = st.number_input("Corriente CD Total [A]", value=100.0)
+
+    # --- Lógica de Simulación Multi-pulso ---
+    f = 60.0
+    w = 2 * np.pi * f
+    alpha_rad = np.deg2rad(alpha_deg)
+    num_puentes = n_pulsos // 6
+    desfase_entre_puentes = (2 * np.pi) / (n_pulsos) # p.ej. 30° para 12 pulsos
+    
+    puntos = 4096
+    theta = np.linspace(0, 2 * np.pi, puntos)
+    v_out_total = np.zeros(puntos)
+    i_linea_primario = np.zeros(puntos)
+    
+    Vm_linea = Vll_rms * np.sqrt(2)
+    
+    for k in range(num_puentes):
+        shift = k * desfase_entre_puentes
+        v_out_k = np.zeros(puntos)
+        
+        # Generación de voltajes de línea desfasados para cada puente
+        vab = Vm_linea * np.sin(theta + shift)
+        vbc = Vm_linea * np.sin(theta - 2*np.pi/3 + shift)
+        vca = Vm_linea * np.sin(theta - 4*np.pi/3 + shift)
+        vba, vcb, vac = -vab, -vbc, -vca
+        
+        # Lógica de 6 pulsos para el puente 'k'
+        offset_ref = np.pi/6 
+        for i in range(puntos):
+            phi = (theta[i] - offset_ref + shift) % (2*np.pi)
+            if alpha_rad <= phi < alpha_rad + np.pi/3: v_out_k[i] = vab[i]
+            elif alpha_rad + np.pi/3 <= phi < alpha_rad + 2*np.pi/3: v_out_k[i] = vac[i]
+            elif alpha_rad + 2*np.pi/3 <= phi < alpha_rad + np.pi: v_out_k[i] = vbc[i]
+            elif alpha_rad + np.pi <= phi < alpha_rad + 4*np.pi/3: v_out_k[i] = vba[i]
+            elif alpha_rad + 4*np.pi/3 <= phi < alpha_rad + 5*np.pi/3: v_out_k[i] = vca[i]
+            else: v_out_k[i] = vcb[i]
+            
+            # Corriente reflejada al primario (simplificada)
+            # Cada puente aporta una componente desfasada a la corriente total
+            if alpha_rad <= phi < alpha_rad + 2*np.pi/3:
+                i_linea_primario[i] += (Idc_total / num_puentes) * np.cos(shift)
+            elif alpha_rad + np.pi <= phi < alpha_rad + 5*np.pi/3:
+                i_linea_primario[i] -= (Idc_total / num_puentes) * np.cos(shift)
+
+        v_out_total += v_out_k / num_puentes
+
+    # --- Análisis FFT ---
+    fft_vals = np.fft.rfft(i_linea_primario)
+    fft_mag = np.abs(fft_vals) * 2 / puntos
+    thd_i = np.sqrt(np.sum(fft_mag[2:100]**2)) / fft_mag[1] * 100
+
+    # --- Métricas ---
+    st.subheader(f"📊 Análisis del Sistema de {n_pulsos} Pulsos")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Vdc Promedio", f"{np.mean(v_out_total):.2f} V")
+    c2.metric("THD Corriente (I_linea)", f"{thd_i:.2f} %")
+    c3.metric("Primer Armónico", f"Orden {n_pulsos-1} y {n_pulsos+1}")
+
+    # --- Gráficas ---
+    fig21, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 10))
+    
+    ax1.plot(theta/(2*np.pi), v_out_total, 'b', lw=2, label=f"Voltaje CD ({n_pulsos} pulsos)")
+    ax1.set_title("Voltaje de Salida Rectificado")
+    ax1.grid(True); ax1.legend()
+    
+    # Espectro Armónico
+    h_max = 50
+    ax2.bar(range(1, h_max, 2), fft_mag[1:h_max:2], color='darkred')
+    ax2.set_title("Espectro de Corriente en el Primario")
+    ax2.set_xlim(0, h_max)
+    ax2.set_xlabel("Orden Armónico"); ax2.set_ylabel("Amplitud [A]")
+    
+    st.pyplot(fig21)
+
+    st.info(f"""
+    **Efecto de la Configuración de {n_pulsos} Pulsos:**
+    1. **Cancelación:** Observe cómo desaparecen los armónicos de orden menor a {n_pulsos-1}.
+    2. **Calidad CD:** El rizado de voltaje es casi imperceptible, con una frecuencia fundamental de {60*n_pulsos} Hz.
+    3. **Aplicación:** Esta configuración reduce drásticamente la necesidad de filtros de armónicos pesados en la red.
     """)
