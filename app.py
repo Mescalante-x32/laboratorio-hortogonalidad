@@ -2385,154 +2385,60 @@ elif tema == "29. Troceador Clase C: Tracción y Frenado":
     """)
 
 # =========================================================
-# MÓDULO 30: PUENTE EN H (CUATRO CUADRANTES)
-# =========================================================
-elif tema == "30. Puente en H: Control Total (4 Cuadrantes)":
-    st.header("Módulo 28: Convertidor de Puente Completo")
-    st.write("Control de velocidad, sentido de giro y frenado regenerativo total.")
-
-    with st.sidebar:
-        st.subheader("Configuración del Puente H")
-        V_dc_28 = st.number_input("Voltaje de Fuente (Vdc) [V]", value=200.0, key="vdc28")
-        f_sw_28 = st.number_input("Frecuencia PWM [Hz]", value=2500.0, key="fsw28")
-        D_28 = st.slider("Ciclo de Trabajo (D)", 0.0, 1.0, 0.5, key="d28")
-        
-        st.markdown("---")
-        st.subheader("Parámetros del Motor")
-        E_28 = st.number_input("FEM (E) [V]", value=0.0, help="Positiva para giro horario, negativa para anti-horario")
-        La_28 = st.number_input("Inductancia La [mH]", value=10.0)
-        Ra_28 = st.number_input("Resistencia Ra [Ω]", value=0.5)
-
-    # --- Cálculos de 4 Cuadrantes ---
-    T_28 = 1 / f_sw_28
-    L_28 = La_28 / 1000
-    # Voltaje promedio bipolar: Va = Vdc * (2D - 1)
-    Va_avg = V_dc_28 * (2 * D_28 - 1)
-    
-    # Corriente promedio
-    Ia_avg = (Va_avg - E_28) / Ra_28
-    
-    # --- Identificación de Cuadrante ---
-    st.subheader("📊 Análisis de Operación")
-    c1, c2, c3 = st.columns(3)
-    
-    if Va_avg >= 0:
-        quad = "I (Motor R)" if Ia_avg >= 0 else "II (Freno R)"
-    else:
-        quad = "III (Motor L)" if Ia_avg <= 0 else "IV (Freno L)"
-    
-    c1.metric("Cuadrante Activo", quad)
-    c2.metric("Voltaje Promedio Va", f"{Va_avg:.1f} V")
-    c3.metric("Corriente Ia", f"{Ia_avg:.2f} A")
-
-    # --- Simulación Temporal (Bipolar) ---
-    t_sim = np.linspace(0, 2*T_28, 2000)
-    # En conmutación bipolar, Va salta entre +Vdc y -Vdc
-    v_out_t = np.where((t_sim % T_28) < D_28*T_28, V_dc_28, -V_dc_28)
-    
-    # Rizado (Delta i es el doble que en unipolar para el mismo L y fsw)
-    delta_i = (2 * V_dc_28 * D_28 * (1 - D_28) * T_28) / L_28
-    
-    i_sim = np.zeros_like(t_sim)
-    curr = Ia_avg - (delta_i / 2)
-    for i in range(1, len(t_sim)):
-        dt = t_sim[i] - t_sim[i-1]
-        di = (v_out_t[i] - Ra_28 * curr - E_28) / L_28 * dt
-        curr += di
-        i_sim[i] = curr
-
-    # --- Gráficas ---
-    fig28, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
-    
-    ax1.plot(t_sim*1000, v_out_t, 'b', alpha=0.6, label="v_terminal(t)")
-    ax1.axhline(Va_avg, color='orange', lw=2, label=f"Va_avg={Va_avg:.1f}V")
-    ax1.axhline(E_28, color='r', ls='--', label="E (FEM)")
-    ax1.set_ylabel("Voltaje [V]"); ax1.grid(True, alpha=0.3); ax1.legend()
-    
-    ax2.plot(t_sim*1000, i_sim, 'darkgreen', lw=2)
-    ax2.axhline(0, color='black', lw=1)
-    ax2.set_ylabel("Corriente Ia [A]"); ax2.set_xlabel("Tiempo [ms]"); ax2.grid(True, alpha=0.3)
-    
-    st.pyplot(fig28)
-
-    st.info(f"""
-    **Lección Final de Troceadores:**
-    1. **Inversión de Marcha:** Mueva el slider de D por debajo de 0.5 y observe cómo el voltaje promedio se vuelve negativo.
-    2. **Rizado Bipolar:** Note que el voltaje de salida ahora conmuta entre **+{V_dc_28}V** y **-{V_dc_28}V**. Esto duplica el rizado de corriente en comparación con los módulos anteriores.
-    3. **Cuadrantes:** Al ajustar la FEM (E) y el Ciclo de Trabajo (D), el estudiante puede posicionar el sistema en cualquiera de los 4 cuadrantes del plano V-I.
-    """)
-
-# =========================================================
-# MÓDULO 31: CONTROL PI DE CORRIENTE (LAZO CERRADO)
+# MÓDULO 31 MEJORADO: PI + FEED-FORWARD
 # =========================================================
 elif tema == "31. Control PI: Regulación de Corriente":
-    st.header("Módulo 29: Control Automático de Corriente")
-    st.write("Diseño y sintonía de un controlador PI para el Troceador Clase A.")
-
+    st.header("Módulo 29: Control de Corriente con Feed-forward")
+    
     with st.sidebar:
-        st.subheader("Parámetros del Controlador PI")
-        Kp = st.slider("Ganancia Proporcional (Kp)", 0.01, 20.0, 0.1)
-        Ki = st.slider("Ganancia Integral (Ki)", 0.1, 50.0, 10.0)
+        st.subheader("Sintonía Automática")
+        tau_cl = st.slider("Constante de tiempo deseada (ms)", 1, 50, 10) / 1000
         I_ref = st.number_input("Corriente Deseada (Iref) [A]", value=10.0)
         
         st.markdown("---")
-        st.subheader("Planta (Motor R-L-E)")
+        st.subheader("Parámetros del Sistema")
         V_dc = 200.0
-        La_mH = st.number_input("Inductancia [mH]", value=10.0)
-        Ra = 0.5
-        E_dist = st.slider("Perturbación: FEM (E) [V]", 0, 150, 50)
+        La_mH = 10.0; Ra = 0.5
+        E_dist = st.slider("FEM del Motor (E) [V]", 0, 150, 100)
 
-    # --- Simulación Dinámica (Lazo Cerrado) ---
-    fs = 10000 # Frecuencia de muestreo de la simulación
-    t_stop = 0.2
+    # --- Diseño del Controlador ---
+    L = La_mH / 1000
+    # Sintonía por cancelación de polo (Zero-Pole Cancellation)
+    Kp_calc = L / tau_cl
+    Ki_calc = Ra / tau_cl
+
+    # --- Simulación ---
+    fs = 10000; t_stop = 0.15
     t_vec = np.linspace(0, t_stop, int(t_stop * fs))
     dt = 1/fs
-    L = La_mH / 1000
-
-    # Variables de estado
-    i_actual = 0.0
-    error_integral = 0.0
-    history_i = []
-    history_D = []
+    
+    i_actual = 0.0; err_int = 0.0
+    h_i = []; h_D = []
 
     for t in t_vec:
-        # 1. Cálculo del Error
         error = I_ref - i_actual
-        error_integral += error * dt
+        err_int += error * dt
         
-        # 2. Ley de Control PI (con Anti-windup simple)
-        v_control = Kp * error + Ki * error_integral
-        D_sat = max(0.0, min(1.0, v_control / V_dc)) # Normalización y Saturación
+        # SALIDA DEL PI + FEED-FORWARD (Prealimentación de E)
+        v_pi = Kp_calc * error + Ki_calc * err_int
+        v_control = v_pi + E_dist  # <-- Feed-forward de la FEM
         
-        # 3. Dinámica de la Planta (Modelo promediado para estabilidad)
+        D_sat = max(0.0, min(1.0, v_control / V_dc))
+        
+        # Planta
         di = (D_sat * V_dc - Ra * i_actual - E_dist) / L * dt
         i_actual += di
         
-        history_i.append(i_actual)
-        history_D.append(D_sat)
+        h_i.append(i_actual); h_D.append(D_sat)
 
-    # --- Visualización de Resultados ---
-    c1, c2 = st.columns(2)
-    with c1:
-        fig_i, ax_i = plt.subplots()
-        ax_i.plot(t_vec, history_i, 'g', label="Ia Real")
-        ax_i.axhline(I_ref, color='r', ls='--', label="Iref")
-        ax_i.set_title("Respuesta en Lazo Cerrado"); ax_i.set_ylabel("Corriente [A]")
-        ax_i.legend(); ax_i.grid(True)
-        st.pyplot(fig_i)
+    # --- Gráficas ---
+    st.write(f"**Gancias calculadas:** $K_p = {Kp_calc:.4f}$, $K_i = {Ki_calc:.2f}$")
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
     
-    with c2:
-        fig_d, ax_d = plt.subplots()
-        ax_d.plot(t_vec, history_D, 'b', label="Ciclo de Trabajo (D)")
-        ax_d.set_title("Esfuerzo de Control"); ax_d.set_ylabel("D [0-1]")
-        ax_d.set_ylim(0, 1.1); ax_d.grid(True)
-        st.pyplot(fig_d)
-
-    st.latex(r"D(s) = \frac{K_p \cdot e(s) + \frac{K_i}{s} \cdot e(s)}{V_{dc}}")
-
-    st.info("""
-    **Guía para el Estudiante:**
-    1. **Sintonía:** Intente aumentar **Kp** para acelerar la respuesta. Si observa oscilaciones, el sistema se está volviendo inestable.
-    2. **Rechazo de Perturbaciones:** Cambie la **FEM (E)** mientras el sistema corre. Verá cómo el controlador PI ajusta automáticamente **D** para mantener la corriente constante.
-    3. **Error en Estado Estacionario:** Observe que gracias a la parte Integral (**Ki**), la corriente alcanza exactamente la referencia.
-    """)
+    ax1.plot(t_vec, h_i, 'g', lw=2, label="Ia Real")
+    ax1.axhline(I_ref, color='r', ls='--', label="Referencia")
+    ax1.set_ylabel("Corriente [A]"); ax1.legend(); ax1.grid(True)
+    
+    ax2.plot(t_vec, h_D, 'b', lw=2, label="Esfuerzo de Control (D)")
+    ax2.set_ylabel("Ciclo de Trabajo [0-1]"); ax2.grid(True)
+    st.pyplot(fig)
