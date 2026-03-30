@@ -44,7 +44,8 @@ tema = st.sidebar.radio(
         "30. Puente en H: Control Total (4 Cuadrantes)",
         "31. Control PI: Regulación de Corriente",
         "32. Control de Velocidad: Lazo en Cascada",
-        "33. Síntesis y Evaluación: Control en Cascada"
+        "33. Síntesis y Evaluación: Control en Cascada",
+        "34. Síntesis y Evaluación: Control en Cascada (completo)"
     )
 )
 
@@ -2618,3 +2619,118 @@ elif tema == "33. Síntesis y Evaluación: Control en Cascada":
     st.markdown("---")
     st.subheader("3. Autoevaluación de Conceptos")
     # Aquí se inserta el componente interactivo de Quiz que definimos previamente
+
+# =========================================================
+# MÓDULO 34: SÍNTESIS, ROBUSTEZ Y AUTOEVALUACIÓN (COMPLETO)
+# =========================================================
+elif tema == "34. Síntesis y Evaluación: Control en Cascada (completo)":
+    st.header("Módulo 31: Evaluación Integral de Controladores CD")
+    
+    # --- SECCIÓN 1: SELECCIÓN DE HARDWARE ---
+    st.subheader("1. Guía de Selección de Topologías")
+    tabla_data = {
+        "Troceador": ["Clase A", "Clase B", "Clase C", "Clase E"],
+        "Cuadrantes": ["I", "II", "I y II", "I a IV"],
+        "Capacidad": ["Solo Tracción", "Solo Frenado", "Tracción/Frenado", "Inversión Total"],
+        "Lazo Cascada": ["No (Sin frenado)", "No (Sin arranque)", "Sí (Recomendado)", "Sí (Versátil)"]
+    }
+    st.table(tabla_data)
+
+    # --- SECCIÓN 2: SIMULADOR DE ROBUSTEZ EN CASCADA ---
+    st.subheader("2. Laboratorio de Robustez y Seguimiento")
+    
+    with st.sidebar:
+        st.subheader("Configuración del Sistema")
+        w_ref = st.number_input("w_ref [rad/s]", value=100.0)
+        I_max = st.slider("Límite de Corriente [A]", 5, 50, 20)
+        Kw_p = st.slider("Kp Velocidad", 0.1, 5.0, 1.5)
+        Kw_i = st.slider("Ki Velocidad", 0.1, 20.0, 8.0)
+        
+        st.markdown("---")
+        st.subheader("Robustez (Planta Real)")
+        L_nom = 0.01; R_nom = 0.5; V_dc = 200.0; Kt = 0.5; J = 0.01; B = 0.001
+        mismatch_L = st.slider("Variación de La Real (%)", 50, 150, 100) / 100
+        L_real = L_nom * mismatch_L
+
+    # --- Simulación ---
+    fs = 5000; t_stop = 0.5; dt = 1/fs
+    t_vec = np.linspace(0, t_stop, int(t_stop * fs))
+    Kp_i = 2.0; Ki_i = 100.0 # Lazo interno fijo
+
+    w_act = 0.0; i_act = 0.0; err_i_w = 0.0; err_i_i = 0.0
+    h_w = []; h_i = []; h_ref = []
+
+    for t in t_vec:
+        # Lazo Externo -> I_ref con Saturación
+        e_w = w_ref - w_act
+        err_i_w += e_w * dt
+        i_ref = max(-I_max, min(I_max, Kw_p * e_w + Kw_i * err_i_w))
+        
+        # Lazo Interno -> D con Feed-forward y Saturación
+        E = Kt * w_act
+        e_i = i_ref - i_act
+        err_i_i += e_i * dt
+        v_total = Kp_i * e_i + Ki_i * err_i_i + E
+        D = max(0, min(1, v_total / V_dc))
+        
+        # Evolución Física (Planta Real)
+        di = (D * V_dc - R_nom * i_act - E) / L_real * dt
+        i_act += di
+        dw = (Kt * i_act - B * w_act) / J * dt
+        w_act += dw
+        
+        h_w.append(w_act); h_i.append(i_act); h_ref.append(i_ref)
+
+    # --- Gráficas ---
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
+    ax1.plot(t_vec, h_w, 'b', label="w_real"); ax1.axhline(w_ref, color='r', ls='--', label="w_ref")
+    ax1.set_ylabel("Velocidad [rad/s]"); ax1.legend(); ax1.grid(True, alpha=0.3)
+    
+    ax2.plot(t_vec, h_i, 'g', label="Ia_real")
+    ax2.plot(t_vec, h_ref, 'r', ls=':', label="Ia_ref (Sat)")
+    ax2.set_ylabel("Corriente [A]"); ax2.set_xlabel("Tiempo [s]"); ax2.legend(); ax2.grid(True, alpha=0.3)
+    st.pyplot(fig)
+
+    # --- SECCIÓN 3: CUESTIONARIO (QUIZ) ---
+    st.markdown("---")
+    st.subheader("3. Autoevaluación de Control de Accionamientos")
+
+    with st.expander("Haz clic aquí para responder el cuestionario"):
+        # Pregunta 1
+        q1 = st.radio(
+            "1. ¿Por qué el lazo de corriente debe ser más rápido que el de velocidad?",
+            ["Para evitar que el motor se queme", 
+             "Para que el lazo externo vea al interno como una ganancia ideal", 
+             "Porque el torque es proporcional a la velocidad"],
+            index=None
+        )
+        if q1 == "Para que el lazo externo vea al interno como una ganancia ideal":
+            st.success("¡Correcto! Esto permite el desacoplamiento de dinámicas.")
+        elif q1 is not None:
+            st.error("Incorrecto. Revise el concepto de jerarquía de control.")
+
+        # Pregunta 2
+        q2 = st.radio(
+            "2. Si L_real < L_nom en un diseño de cancelación polo-cero, ¿qué sucede?",
+            ["El sistema se vuelve más lento", 
+             "El error de estado estacionario aumenta", 
+             "Aparece sobretiro (overshoot) y posibles oscilaciones"],
+            index=None
+        )
+        if q2 == "Aparece sobretiro (overshoot) y posibles oscilaciones":
+            st.success("¡Correcto! El controlador es demasiado agresivo para la carga real.")
+        elif q2 is not None:
+            st.error("Incorrecto. Una L menor acelera la respuesta pero reduce la estabilidad.")
+
+        # Pregunta 3
+        q3 = st.radio(
+            "3. ¿Qué componente de hardware es indispensable para el Módulo 30?",
+            ["Diodo Volante", 
+             "Saturación (Límite) de la referencia de corriente", 
+             "Transformador de aislamiento"],
+            index=None
+        )
+        if q3 == "Saturación (Límite) de la referencia de corriente":
+            st.success("¡Correcto! Es la única forma de proteger los semiconductores ante errores de velocidad grandes.")
+        elif q3 is not None:
+            st.error("Incorrecto. Piense en la protección del hardware.")
