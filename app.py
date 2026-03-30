@@ -2180,60 +2180,81 @@ elif tema == "27. Análisis de Rizado y L Crítica":
     """)
 
 # =========================================================
-# MÓDULO 28 (FINAL): ÍNDICES DE REGENERACIÓN Y POTENCIA
+# MÓDULO 28: TROCEADOR CLASE B - REGENERATIVO E ÍNDICES
 # =========================================================
 elif tema == "28. Troceador Clase B (Regenerativo)":
-    # ... (Sidebar y parámetros iguales al bloque anterior)
+    st.header("Módulo 26: Recuperación de Energía y Eficiencia")
+    st.write("Análisis del flujo de potencia y pérdidas en el frenado.")
 
-    # --- Cálculos de Potencia e Índices ---
-    T = 1 / f_sw
+    with st.sidebar:
+        st.subheader("Configuración de Red")
+        V_dc = st.number_input("Voltaje de Red/Batería (Vdc) [V]", value=200.0)
+        f_sw_26 = st.number_input("Frecuencia Conmutación [Hz]", value=2500.0, key="fsw26")
+        D = st.slider("Ciclo de Trabajo (D)", 0.05, 0.95, 0.6)
+        
+        st.markdown("---")
+        st.subheader("Estado de la Máquina")
+        E_gen = st.number_input("FEM Generada (E) [V]", value=160.0)
+        La_mH = st.number_input("Inductancia La [mH]", value=15.0)
+        Ra = st.number_input("Resistencia Ra [Ω]", value=0.5)
+
+    # --- Cálculos Técnicos e Índices (Protegidos) ---
+    T = 1 / f_sw_26
     L = La_mH / 1000
-    Vo_avg = (1 - D) * V_dc # Voltaje promedio en terminales de la fuente
     
-    # Corriente promedio de frenado
+    # Voltaje promedio Vo_avg = (1-D)*Vdc
+    Vo_avg = (1 - D) * V_dc
+    
+    # Corriente promedio de frenado (E - Ra*Ia - Vo_avg = 0)
     Ia_avg = (E_gen - Vo_avg) / Ra if E_gen > Vo_avg else 0.0
     
-    # 1. Potencia Total Generada por el Motor (como generador)
-    P_gen = E_gen * Ia_avg
+    # Índices de Potencia
+    P_gen = E_gen * Ia_avg          # Potencia convertida de mecánica a eléctrica
+    P_loss = (Ia_avg**2) * Ra       # Pérdidas por calor en el cobre
+    P_rec = Vo_avg * Ia_avg         # Potencia que efectivamente entra a la fuente
     
-    # 2. Pérdidas por efecto Joule en la armadura (Resistencia)
-    # Nota: Para rigor, se usa Ia_rms, pero en CCM con bajo rizado Ia_avg es buena aprox.
-    P_loss = (Ia_avg**2) * Ra
-    
-    # 3. Potencia Real Recuperada (la que llega a la fuente Vdc)
-    P_rec = P_gen - P_loss # También calculable como Vo_avg * Ia_avg
-    
-    # 4. Eficiencia de la Regeneración
     eficiencia = (P_rec / P_gen * 100) if P_gen > 0 else 0.0
 
-    # --- Métricas de Aprendizaje ---
+    # --- Métricas ---
     st.subheader("📊 Índices de Desempeño Energético")
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("P. Generada (E*Ia)", f"{P_gen:.1f} W")
-    c2.metric("P. Perdida (I²R)", f"{P_loss:.1f} W", delta_color="inverse")
+    c1.metric("P. Generada", f"{P_gen:.1f} W")
+    c2.metric("P. Perdida (I²R)", f"{P_loss:.1f} W", delta=f"{(P_loss/P_gen*100 if P_gen>0 else 0):.1f}%", delta_color="inverse")
     c3.metric("P. Recuperada", f"{P_rec:.1f} W")
     c4.metric("Eficiencia η", f"{eficiencia:.1f} %")
 
-    # --- Simulación y Gráfica (Igual al bloque anterior) ---
-    # ... [Código de simulación de i_regeneracion] ...
-
-    # --- Bloque de Análisis para el Estudiante ---
-    st.markdown("---")
-    st.write("### 💡 Análisis de los Resultados")
+    # --- Simulación de Corriente con Rizado ---
+    t_sim = np.linspace(0, 2.5*T, 1500)
+    v_sw = np.where((t_sim % T) < D*T, 0, V_dc)
     
-    col_a, col_b = st.columns(2)
-    with col_a:
-        st.write(f"""
-        **¿Por qué la eficiencia es del {eficiencia:.1f}%?**
-        * El motor genera **{P_gen:.1f} W** de potencia mecánica convertida a eléctrica.
-        * Sin embargo, el paso de corriente por $R_a$ disipa **{P_loss:.1f} W** en forma de calor.
-        * Solo el remanente (**{P_rec:.1f} W**) logra vencer la barrera de potencial de la fuente $V_{{dc}}$.
-        """)
-    with col_b:
-        st.write("""
-        **Influencia del Ciclo de Trabajo (D):**
-        * Si **aumenta D**, el voltaje promedio $V_{o}$ disminuye.
-        * Esto aumenta la diferencia $(E - V_{o})$, lo que dispara la corriente de frenado.
-        * **Cuidado:** Una corriente muy alta aumenta las pérdidas cuadráticas ($I^2R$), bajando la eficiencia aunque se recupere más potencia total.
-        """)
+    # Rizado aproximado para visualización didáctica
+    delta_i = (V_dc * D * (1-D) * T) / L if Ia_avg > 0 else 0
+    
+    i_frenado = np.zeros_like(t_sim)
+    curr = max(0, Ia_avg - (delta_i/2))
+    for i in range(1, len(t_sim)):
+        dt = t_sim[i] - t_sim[i-1]
+        # E - L(di/dt) - Ri = v_switch
+        di = (E_gen - Ra * curr - v_sw[i]) / L * dt
+        curr += di
+        i_frenado[i] = max(0, curr)
 
+    # --- Gráficas ---
+    fig26, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 9), sharex=True)
+    
+    ax1.plot(t_sim*1000, v_sw, 'r', lw=1.5, label="v_terminales(t)")
+    ax1.axhline(E_gen, color='b', ls='--', alpha=0.6, label="E (FEM)")
+    ax1.set_ylabel("Voltaje [V]"); ax1.grid(True, alpha=0.3); ax1.legend()
+    
+    ax2.plot(t_sim*1000, i_frenado, 'darkorange', lw=2, label="i_regeneración(t)")
+    ax2.fill_between(t_sim*1000, i_frenado, 0, color='orange', alpha=0.1)
+    ax2.set_ylabel("Corriente [A]"); ax2.set_xlabel("Tiempo [ms]"); ax2.grid(True, alpha=0.3)
+    
+    st.pyplot(fig26)
+
+    st.info(f"""
+    **Lección de Diseño:**
+    * Para recuperar energía, el sistema debe "bombear" corriente contra la fuente. 
+    * Observe que la eficiencia es del **{eficiencia:.1f}%**. El resto se pierde en **{P_loss:.1f} W** de calor en la armadura. 
+    * Si intenta frenar con demasiada corriente (bajando D), las pérdidas $I^2R$ podrían superar la ganancia, calentando el motor innecesariamente.
+    """)
