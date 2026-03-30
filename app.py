@@ -37,7 +37,8 @@ tema = st.sidebar.radio(
         "23. Rectificadores Multi-pulso",
         "24. Autoevaluación: Sistemas Multi-pulso",
         "25. Traslape en Sistemas Trifásicos",
-        "26. Troceadores y Cuadrantes de Operación"
+        "26. Troceadores y Cuadrantes de Operación",
+        "27. Análisis de Rizado y L Crítica"
     )
 )
 
@@ -2091,3 +2092,88 @@ elif tema == "26. Troceadores y Cuadrantes de Operación":
         ax_q.add_patch(r)
     
     st.sidebar.pyplot(fig_q)
+
+# =========================================================
+# MÓDULO 27: TROCEADOR CLASE A - CARGA R-L-E
+# =========================================================
+elif tema == "27. Análisis de Rizado y L Crítica":
+    st.header("Módulo 25: Diseño del Inductor y Rizado de Corriente")
+    st.write("Cálculo del rizado en la armadura y determinación del régimen de conducción.")
+
+    with st.sidebar:
+        st.subheader("Parámetros del Sistema")
+        V_dc = st.number_input("Voltaje Fuente (Vdc) [V]", value=240.0)
+        f_sw = st.number_input("Frecuencia PWM [Hz]", value=2000.0)
+        D = st.slider("Ciclo de Trabajo (D)", 0.05, 0.95, 0.5)
+        
+        st.markdown("---")
+        st.subheader("Parámetros del Motor (Carga)")
+        Ra = st.number_input("Resistencia Armadura (Ra) [Ω]", value=0.5)
+        La_mH = st.number_input("Inductancia (La) [mH]", value=10.0, step=1.0)
+        E_emf = st.number_input("F.E.M. (E) [V]", value=100.0)
+
+    # --- Cálculos Técnicos ---
+    T = 1 / f_sw
+    L = La_mH / 1000
+    tau = L / Ra
+    
+    # Voltaje promedio de salida
+    Va_avg = D * V_dc
+    # Corriente promedio (Estado estacionario)
+    Ia_avg = (Va_avg - E_emf) / Ra if Va_avg > E_emf else 0.0
+    
+    # Rizado de corriente aproximado (suponiendo Ra despreciable para delta i)
+    delta_i = (V_dc - Va_avg) * (D * T) / L
+    
+    # Corrientes máximas y mínimas
+    I_max = Ia_avg + (delta_i / 2)
+    I_min = Ia_avg - (delta_i / 2)
+    
+    # Inductancia Crítica para evitar DCM
+    L_critica = ((1 - D) * Ra * T) / (2 * np.log((1 + np.exp(T/tau))/(1 + np.exp(D*T/tau)))) # Exacta
+    L_crit_aprox = (V_dc * D * (1 - D) * T) / (2 * Ia_avg) if Ia_avg > 0 else 0
+
+    # --- Métricas ---
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Ia Promedio", f"{Ia_avg:.2f} A")
+    c2.metric("Rizado Δi", f"{delta_i:.2f} A")
+    
+    if I_min > 0:
+        c3.success("Régimen: Continuo (CCM)")
+    else:
+        c3.warning("Régimen: Discontinuo (DCM)")
+
+    # --- Simulación Temporal ---
+    t_sim = np.linspace(0, 2*T, 1000)
+    v_sw = np.where((t_sim % T) < D*T, V_dc, 0)
+    
+    # Respuesta simplificada de corriente (triangular aproximada)
+    i_sim = np.zeros_like(t_sim)
+    curr = Ia_avg - (delta_i / 2)
+    for i in range(1, len(t_sim)):
+        dt = t_sim[i] - t_sim[i-1]
+        v_inst = v_sw[i]
+        di = (v_inst - Ra * curr - E_emf) / L * dt
+        curr += di
+        i_sim[i] = max(0, curr)
+
+    # --- Gráficas ---
+    fig25, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+    ax1.plot(t_sim*1000, v_sw, 'b', lw=2, label="v_armadura(t)")
+    ax1.axhline(E_emf, color='r', ls='--', label="E (FEM)")
+    ax1.set_ylabel("Voltaje [V]"); ax1.legend(); ax1.grid(True)
+    
+    ax2.plot(t_sim*1000, i_sim, 'g', lw=2, label="i_armadura(t)")
+    ax2.fill_between(t_sim*1000, i_sim, 0, color='g', alpha=0.1)
+    ax2.set_ylabel("Corriente [A]"); ax2.set_xlabel("Tiempo [ms]"); ax2.legend(); ax2.grid(True)
+    
+    st.pyplot(fig25)
+
+    st.latex(r"\Delta i = \frac{V_{dc} \cdot D \cdot (1-D)}{f_{sw} \cdot L}")
+    
+    st.info(f"""
+    **Análisis de Diseño:**
+    * **Rizado:** Con $L = {La_mH}$ mH, el rizado es del { (delta_i/Ia_avg*100 if Ia_avg > 0 else 0):.1f}% respecto a la media.
+    * **Efecto de la frecuencia:** Si aumenta $f_{{sw}}$, verá cómo $\Delta i$ disminuye, permitiendo inductores más pequeños.
+    * **Condición Crítica:** Para mantener conducción continua con esta carga, se requeriría una $L > {L_crit_aprox*1000:.2f}$ mH.
+    """)
