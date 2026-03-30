@@ -29,7 +29,8 @@ tema = st.sidebar.radio(
         "15. Autoevaluación: Rectificadores",
         "16. Puente Controlado (Carga R y RL)",
         "17. Puente Controlado (Carga R y RL)",
-        "18. Bidireccionalidad de Potencia (Fuente I)"
+        "18. Bidireccionalidad de Potencia (Fuente I)",
+        "19. Bidireccionalidad de Potencia (Fuente I)-extendido"
     )
 )
 
@@ -1374,3 +1375,101 @@ elif tema == "18. Bidireccionalidad de Potencia (Fuente I)":
     * **α = 90°:** El voltaje promedio es cero. La potencia neta transferida es nula.
     * **α > 90°:** El voltaje promedio es negativo. Como la corriente $I_{{dc}}$ mantiene su dirección, la potencia es negativa, lo que significa que fluye de la fuente CD hacia la red CA (Inversión).
     """)
+
+# =========================================================
+# MÓDULO 19: ANÁLISIS DE POTENCIA Y CALIDAD (FFT)
+# =========================================================
+elif tema == "19. Bidireccionalidad de Potencia (Fuente I)-extendido":
+    st.header("Módulo 17: Calidad de Energía y Bidireccionalidad")
+    st.write("Cálculo de THD, Factor de Potencia y flujo de potencia con carga de corriente constante.")
+
+    with st.sidebar:
+        st.subheader("Configuración del Sistema")
+        Vm_17 = st.number_input("Voltaje Pico Fuente [V]", value=170.0)
+        f_17 = st.number_input("Frecuencia [Hz]", value=60.0)
+        alpha_deg = st.slider("Ángulo de Disparo (α) [°]", 0, 180, 30)
+        Idc_val = st.number_input("Corriente de Carga Idc [A]", value=10.0)
+        num_ciclos = 4 # Necesitamos varios ciclos para una FFT limpia
+
+    # --- Simulación y Vectores ---
+    alpha_rad = np.deg2rad(alpha_deg)
+    w = 2 * np.pi * f_17
+    puntos = num_ciclos * 2000
+    theta = np.linspace(0, 2 * np.pi * num_ciclos, puntos)
+    dt = (theta[1] - theta[0]) / w
+    
+    v_s = Vm_17 * np.sin(theta)
+    v_out = np.zeros(puntos)
+    i_in = np.zeros(puntos)
+    
+    for i in range(puntos):
+        phi = theta[i] % np.pi
+        if phi >= alpha_rad:
+            v_out[i] = np.abs(v_s[i])
+            i_in[i] = Idc_val if v_s[i] >= 0 else -Idc_val
+        else:
+            v_out[i] = -np.abs(v_s[i])
+            i_in[i] = -Idc_val if v_s[i] >= 0 else Idc_val
+
+    # --- Cálculos de Desempeño (Lado CD) ---
+    v_dc_avg = (2 * Vm_17 / np.pi) * np.cos(alpha_rad)
+    p_dc = v_dc_avg * Idc_val
+
+    # --- Cálculos de Desempeño (Lado CA) ---
+    v_rms = Vm_17 / np.sqrt(2)
+    i_rms = Idc_val # Para una onda cuadrada pura de amplitud Idc
+    s_app = v_rms * i_rms # Potencia Aparente
+    
+    # Análisis de Fourier para THD y Factor de Desplazamiento
+    # Tomamos el último ciclo para evitar transitorios del linspace
+    ciclo_inicio = int(puntos * (num_ciclos - 1) / num_ciclos)
+    i_sample = i_in[ciclo_inicio:]
+    fft_vals = np.fft.rfft(i_sample)
+    fft_mag = np.abs(fft_vals) * 2 / len(i_sample)
+    
+    i1_rms = fft_mag[1] / np.sqrt(2) # Fundamental RMS
+    thd_i = np.sqrt(np.sum(fft_mag[2:]**2)) / fft_mag[1] * 100
+    
+    # Factor de Potencia = (I1_rms / I_rms) * cos(alpha)
+    dist_factor = i1_rms / i_rms
+    disp_factor = np.abs(np.cos(alpha_rad))
+    fp = dist_factor * disp_factor
+
+    # --- Interfaz de Métricas ---
+    st.subheader("📊 Índices de Desempeño")
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Vdc Promedio", f"{v_dc_avg:.1f} V")
+    col2.metric("P_media", f"{p_dc:.1f} W")
+    col3.metric("THD Corriente", f"{thd_i:.2f} %")
+    col4.metric("Factor Potencia", f"{fp:.3f}")
+
+    # --- Visualización ---
+    fig17, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 10), sharex=True)
+    x_eje = theta / (2 * np.pi)
+    
+    # Gráfica 1: Voltajes y Corriente de Línea
+    ax1.plot(x_eje, v_s, 'gray', ls='--', alpha=0.3, label="v_fuente (CA)")
+    ax1.plot(x_eje, v_out, 'b', lw=1.5, label="v_salida (CD)")
+    ax1_twin = ax1.twinx()
+    ax1_twin.plot(x_eje, i_in, 'r', lw=2, label="i_línea (CA)")
+    ax1_twin.set_ylabel("Corriente [A]", color='r')
+    ax1.set_ylabel("Voltaje [V]"); ax1.grid(True)
+    ax1.legend(loc='upper left'); ax1_twin.legend(loc='upper right')
+    
+    # Gráfica 2: Potencia Instantánea de Entrada
+    p_in = v_s * i_in
+    ax2.plot(x_eje, p_in, 'purple', lw=2, label="p_entrada(t)")
+    ax2.fill_between(x_eje, p_in, 0, color='purple', alpha=0.1)
+    ax2.set_ylabel("Potencia [W]"); ax2.set_xlabel("Ciclos"); ax2.grid(True); ax2.legend()
+    
+    st.pyplot(fig17)
+
+    # --- Desglose de Potencias ---
+    with st.expander("Ver Desglose de Potencias y Calidad"):
+        st.write(f"""
+        * **Potencia Aparente (S):** {s_app:.2f} VA
+        * **Potencia Activa (P):** {p_dc:.2f} W (Asumiendo convertidor ideal)
+        * **Factor de Distorsión:** {dist_factor:.3f}
+        * **Factor de Desplazamiento (cos α):** {disp_factor:.3f}
+        * **Componente Fundamental RMS ($I_1$):** {i1_rms:.2f} A
+        """)
