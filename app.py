@@ -651,83 +651,90 @@ elif tema == "10. Diodo de Marcha Libre (Freewheeling)":
     st.success(f"✅ **Conclusión Pedagógica:** Observe que el voltaje de salida ya no tiene la parte negativa del módulo anterior. La corriente es más suave (menos rizado) porque el inductor descarga su energía a través del diodo de marcha libre durante todo el semiciclo negativo.")
 
 # ==========================================
-# MÓDULO 11: INDUCTANCIA DE LÍNEA (MONOFÁSICO)
+# MÓDULO 11: EFECTO DE L_s (CORRIENTE CONSTANTE)
 # ==========================================
 elif tema == "11. Efecto de Inductancia de Línea":
-    st.header("Módulo 11: Efecto de la Inductancia de Línea ($L_s$) en Rectificador Monofásico")
-    st.write("Análisis del retraso de conmutación en la entrada del rectificador.")
+    st.header("Módulo 11: Inductancia de Línea con Corriente de Carga Constante")
+    st.write("Análisis del fenómeno de conmutación asumiendo una carga altamente inductiva ($L \\to \\infty$).")
 
     with st.sidebar:
         st.subheader("Parámetros del Sistema")
-        Vm_11 = st.number_input("Voltaje Pico Fuente [V]", value=170.0)
-        f_11 = st.number_input("Frecuencia [Hz]", value=60.0)
-        Ls_mH = st.slider("Inductancia de Línea Ls [mH]", 0.1, 20.0, 2.0, step=0.1)
-        R_carga = st.number_input("Resistencia de Carga [Ω]", value=20.0)
+        Vm_11 = st.number_input("Voltaje Pico Fuente [V]", value=170.0, key="vm11_s")
+        f_11 = st.number_input("Frecuencia [Hz]", value=60.0, key="f11_s")
+        Ls_mH = st.slider("Inductancia de Línea Ls [mH]", 0.1, 15.0, 5.0, step=0.1)
+        Id_11 = st.number_input("Corriente de Carga Constante (Id) [A]", value=10.0)
 
-    # --- Cálculos de Conmutación Monofásica ---
+    # --- Cálculos de Conmutación ---
     w11 = 2 * np.pi * f_11
     Ls = Ls_mH / 1000
     
-    # En media onda monofásica, la corriente i(t) debe satisfacer:
-    # Ls*(di/dt) + R*i = Vm*sin(wt)
-    # La solución es i(t) = (Vm/Z) * [sin(wt - phi) + sin(phi)*exp(-t/tau)]
-    Z_s = np.sqrt(R_carga**2 + (w11*Ls)**2)
-    phi_s = np.arctan2(w11*Ls, R_carga)
-    tau_s = Ls / R_carga
+    # En media onda monofásica con Id constante:
+    # El diodo no conduce instantáneamente. La corriente sube de 0 a Id
+    # siguiendo la ecuación: Ls*(di/dt) = Vm*sin(wt)
+    # Integrando: i(wt) = (Vm / (w*Ls)) * (1 - cos(wt))
+    
+    # Hallamos el ángulo de conmutación 'u' donde i(u) = Id
+    # cos(u) = 1 - (Id * w * Ls) / Vm
+    val_cos_u = 1 - (Id_11 * w11 * Ls) / Vm_11
+    
+    if val_cos_u < -1:
+        st.error("⚠️ La caída inductiva es excesiva: la corriente Id no puede alcanzarse con esta Ls.")
+        u_rad = np.pi
+    else:
+        u_rad = np.arccos(val_cos_u)
+    
+    u_deg = np.degrees(u_rad)
+    
+    # Caída de voltaje promedio (V_gamma)
+    # V_gamma = (w * Ls * Id) / (2 * pi)  <-- Para media onda
+    V_gamma = (w11 * Ls * Id_11) / (2 * np.pi)
+    V_dc_ideal = Vm_11 / np.pi
+    V_dc_real = V_dc_ideal - V_gamma
 
-    # Cálculo del ángulo de extinción beta (donde i=0)
-    def ecuacion_i(ang):
-        return np.sin(ang - phi_s) + np.sin(phi_s) * np.exp(-ang / (w11 * tau_s))
+    # --- Resultados ---
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Ángulo de Conmutación (u)", f"{u_deg:.2f}°")
+    c2.metric("Caída de Voltaje (ΔV)", f"{V_gamma:.2f} V")
+    c3.metric("Vdc Real en Carga", f"{V_dc_real:.2f} V")
 
-    busqueda = np.linspace(np.pi, 2*np.pi, 500)
-    beta_11 = np.pi
-    for a in busqueda:
-        if ecuacion_i(a) < 0:
-            beta_11 = a
-            break
-
+    # --- Generación de Gráficas ---
     theta = np.linspace(0, 2*np.pi, 1000)
     v_s = Vm_11 * np.sin(theta)
     
-    # Corriente y Voltaje en la Carga
-    i_s = np.zeros_like(theta)
     v_o = np.zeros_like(theta)
-    v_ls = np.zeros_like(theta) # Voltaje en la inductancia de línea
+    i_s = np.zeros_like(theta)
     
-    idx_cond = np.where(theta <= beta_11)[0]
-    i_s[idx_cond] = (Vm_11 / Z_s) * (np.sin(theta[idx_cond] - phi_s) + 
-                                     np.sin(phi_s) * np.exp(-theta[idx_cond] / (w11 * tau_s)))
-    
-    # v_o = v_s - Ls*(di/dt) -> En la carga R puramente: v_o = i_s * R_carga
-    v_o = i_s * R_carga
-    v_ls = v_s - v_o
+    for i, th in enumerate(theta):
+        if th < u_rad:
+            # Intervalo de conmutación: i sube, Vo = 0 (diodo principal en conmutación)
+            v_o[i] = 0
+            i_s[i] = (Vm_11 / (w11 * Ls)) * (1 - np.cos(th))
+        elif u_rad <= th <= np.pi:
+            # Conducción plena: Vo = Vs, i = Id
+            v_o[i] = v_s[i]
+            i_s[i] = Id_11
+        elif np.pi < th <= (np.pi + (w11 * Ls * Id_11 / Vm_11)): 
+            # Efecto de persistencia por Ls (simplificado)
+            v_o[i] = v_s[i]
+            # La corriente aquí empezaría a bajar... 
+            # Para este modelo de Id constante, asumimos que el diodo de marcha libre (si existe) 
+            # o el corte ocurre cerca de pi.
+            i_s[i] = Id_11 
+        else:
+            v_o[i] = 0
+            i_s[i] = 0
 
-    # ... (resto del código igual arriba)
-    
-    # --- Resultados ---
-    # Usamos np.trapezoid en lugar de np.trapz para compatibilidad con NumPy 2.x
-    V_dc_11 = (1/(2*np.pi)) * np.trapezoid(v_o, theta)
-    
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Ángulo de Extinción β", f"{np.degrees(beta_11):.2f}°")
-    c2.metric("Voltaje CD Promedio", f"{V_dc_11:.2f} V")
-    c3.metric("Caída por Ls (estimada)", f"{((Vm_11/np.pi) - V_dc_11):.2f} V")
-    
-    # ... (continúa con las gráficas)
-
-    # --- Gráficas ---
     fig12, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
     
-    ax1.plot(theta, v_s, 'gray', ls='--', alpha=0.5, label="v_fuente(t)")
+    ax1.plot(theta, v_s, 'gray', ls='--', alpha=0.4, label="v_fuente(t)")
     ax1.plot(theta, v_o, 'b', lw=2, label="v_carga(t)")
-    ax1.fill_between(theta, v_s, v_o, where=(theta<=beta_11), color='orange', alpha=0.2, label="v_Ls(t)")
+    ax1.fill_between(theta, 0, v_s, where=(theta < u_rad), color='red', alpha=0.2, label="Área de pérdida (ΔV)")
     ax1.set_ylabel("Voltaje [V]"); ax1.legend(); ax1.grid(True)
     
     ax2.plot(theta, i_s, 'r', lw=2, label="i_linea(t)")
+    ax2.axhline(Id_11, color='black', ls=':', label="Nivel Id")
     ax2.set_ylabel("Corriente [A]"); ax2.set_xlabel("Fase [rad]"); ax2.legend(); ax2.grid(True)
     
     st.pyplot(fig12)
 
-    st.info(f"💡 **Explicación para el Alumno:** Observe cómo el voltaje en la carga ($v_o$) no sube instantáneamente con la fuente. La diferencia ($v_s - v_o$) es el voltaje que 'absorbe' la inductancia de línea $L_s$ para permitir que la corriente crezca. Esto reduce el área total bajo la curva de voltaje de salida.")
-
-
+    st.info(f"👉 **Análisis:** Al considerar la carga como una fuente de corriente constante **Id**, el ángulo de conmutación **u** representa el tiempo que tarda la corriente de línea en subir desde 0 hasta el valor de la carga. Durante este tiempo (**{u_deg:.1f}°**), el voltaje en la carga es cero, lo que reduce el voltaje promedio final.")
