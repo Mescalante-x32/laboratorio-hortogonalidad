@@ -751,7 +751,7 @@ elif tema == "12. Onda Completa con Filtro C y Ls":
         st.subheader("Parámetros del Circuito")
         Vm_12 = st.number_input("Voltaje Pico Fuente [V]", value=170.0)
         f_12 = st.number_input("Frecuencia [Hz]", value=60.0)
-        Ls_mH_12 = st.slider("Inductancia de Línea Ls [mH]", 0.1, 10.0, 1.0, step=0.1)
+        Ls_mH_12 = st.slider("Inductancia de Línea Ls [mH]", 0.001, 10.0, 1.0, step=0.01)
         C_uF_12 = st.number_input("Capacitor de Filtro [µF]", value=1000.0, step=100.0)
         R_12 = st.number_input("Resistencia de Carga [Ω]", value=50.0, min_value=1.0)
 
