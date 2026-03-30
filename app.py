@@ -31,7 +31,8 @@ tema = st.sidebar.radio(
         "17. Puente Controlado (Carga R y RL)",
         "18. Bidireccionalidad de Potencia (Fuente I)",
         "19. Bidireccionalidad de Potencia (Fuente I)-extendido",
-        "20. Efecto de la Inductancia de Línea (Ls)"
+        "20. Efecto de la Inductancia de Línea (Ls)",
+        "21. Rectificador Trifásico (6 Pulsos)"
     )
 )
 
@@ -1565,3 +1566,107 @@ elif tema == "20. Efecto de la Inductancia de Línea (Ls)":
     * **Pendiente de Corriente:** La corriente de línea ya no es una onda cuadrada perfecta; ahora tiene una rampa finita definida por $L_s$.
     * **Regulación:** A mayor corriente de carga ($I_{{dc}}$) o mayor inductancia ($L_s$), el área perdida de voltaje aumenta, reduciendo el $V_{{dc}}$ real.
     """)
+
+# =========================================================
+# MÓDULO 21: RECTIFICADOR TRIFÁSICO DE 6 PULSOS (SCR)
+# =========================================================
+elif tema == "21. Rectificador Trifásico (6 Pulsos)":
+    st.header("Módulo 19: Puente de Graetz Trifásico Controlado")
+    st.write("Análisis del rectificador industrial de 6 pulsos con control de fase.")
+
+    with st.sidebar:
+        st.subheader("Parámetros de Red Trifásica")
+        Vln_rms = st.number_input("Voltaje Fase-Neutro [Vrms]", value=127.0)
+        f_19 = st.number_input("Frecuencia [Hz]", value=60.0)
+        alpha_deg = st.slider("Ángulo de Disparo (α) [°]", 0, 120, 30)
+        
+        st.markdown("---")
+        st.subheader("Modelo de Carga")
+        Idc_19 = st.number_input("Corriente de Carga (Constante) [A]", value=20.0)
+        num_ciclos = st.slider("Ciclos de visualización", 1, 3, 1)
+
+    # --- Generación de Voltajes Trifásicos ---
+    w = 2 * np.pi * f_19
+    Vm = Vln_rms * np.sqrt(2)
+    puntos = num_ciclos * 2000
+    theta = np.linspace(0, 2 * np.pi * num_ciclos, puntos)
+    
+    # Voltajes de Fase (F-N)
+    va = Vm * np.sin(theta)
+    vb = Vm * np.sin(theta - 2*np.pi/3)
+    vc = Vm * np.sin(theta - 4*np.pi/3)
+    
+    # Voltajes de Línea (F-F) - Los que realmente ve la carga
+    vab, vbc, vca = va - vb, vb - vc, vc - va
+    vba, vcb, vac = -vab, -vbc, -vca
+    
+    v_out = np.zeros(puntos)
+    alpha_rad = np.deg2rad(alpha_deg)
+
+    # --- Lógica de Conmutación de 6 Pulsos ---
+    # Cada pulso dura 60 grados. La referencia de alpha=0 comienza en 
+    # el cruce de voltajes de línea (30° respecto al origen de Va).
+    offset = np.pi/6 # 30 grados
+    
+    for i in range(puntos):
+        phi = (theta[i] - offset) % (2*np.pi)
+        # Secuencia de conducción (6 intervalos de 60°)
+        if alpha_rad <= phi < alpha_rad + np.pi/3:
+            v_out[i] = vab[i] # T1 y T6
+        elif alpha_rad + np.pi/3 <= phi < alpha_rad + 2*np.pi/3:
+            v_out[i] = vac[i] # T1 y T2
+        elif alpha_rad + 2*np.pi/3 <= phi < alpha_rad + np.pi:
+            v_out[i] = vbc[i] # T3 y T2
+        elif alpha_rad + np.pi <= phi < alpha_rad + 4*np.pi/3:
+            v_out[i] = vba[i] # T3 y T4
+        elif alpha_rad + 4*np.pi/3 <= phi < alpha_rad + 5*np.pi/3:
+            v_out[i] = vca[i] # T5 y T4
+        else:
+            v_out[i] = vcb[i] # T5 y T6
+
+    # --- Métricas de Desempeño ---
+    Vll_rms = Vln_rms * np.sqrt(3)
+    Vll_pico = Vll_rms * np.sqrt(2)
+    # Fórmula: Vdc = (3 * Vll_pico / pi) * cos(alpha)
+    v_dc_teo = (3 * Vll_pico / np.pi) * np.cos(alpha_rad)
+    
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Vdc Promedio", f"{v_dc_teo:.2f} V")
+    c2.metric("V_línea Pico", f"{Vll_pico:.1f} V")
+    c3.metric("Frec. Rizado", f"{f_19*6} Hz")
+
+    # --- Gráficas ---
+    fig19 = plt.figure(figsize=(12, 8))
+    gs = fig19.add_gridspec(2, 1, height_ratios=[2, 1])
+    ax1 = fig19.add_subplot(gs[0])
+    ax2 = fig19.add_subplot(gs[1], sharex=ax1)
+    
+    x_ciclos = theta / (2 * np.pi)
+    
+    # Voltajes de Línea (Fondo)
+    ax1.plot(x_ciclos, vab, 'gray', alpha=0.15, ls='--')
+    ax1.plot(x_ciclos, vbc, 'gray', alpha=0.15, ls='--')
+    ax1.plot(x_ciclos, vca, 'gray', alpha=0.15, ls='--')
+    
+    # Voltaje Rectificado
+    ax1.plot(x_ciclos, v_out, 'b', lw=2.5, label="Voltaje de Salida CD")
+    ax1.set_ylabel("Voltaje [V]"); ax1.grid(True, alpha=0.3); ax1.legend()
+    ax1.set_title(f"Rectificación Trifásica a α = {alpha_deg}°")
+    
+    # Corriente de Fase A (Visualización del bloque de 120°)
+    i_a = np.zeros(puntos)
+    for i in range(puntos):
+        phi = (theta[i] - offset) % (2*np.pi)
+        # Fase A conduce en los primeros dos intervalos (positivo) 
+        # y en el 4to y 5to (negativo)
+        if alpha_rad <= phi < alpha_rad + 2*np.pi/3:
+            i_a[i] = Idc_19
+        elif alpha_rad + np.pi <= phi < alpha_rad + 5*np.pi/3:
+            i_a[i] = -Idc_19
+            
+    ax2.plot(x_ciclos, i_a, 'r', lw=2, label="Corriente Fase A (i_a)")
+    ax2.set_ylabel("Corriente [A]"); ax2.set_xlabel("Ciclos"); ax2.grid(True); ax2.legend()
+    
+    st.pyplot(fig19)
+
+    st.latex(r"V_{dc} = \frac{3 \sqrt{2} V_{L-L,rms}}{\pi} \cos \alpha")
