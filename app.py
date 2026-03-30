@@ -20,7 +20,8 @@ tema = st.sidebar.radio(
         "6. Corrección del Factor de Potencia",
         "7. Parámetros No Sinusoidales",
         "8. Autoevaluación de CA y Armónicos",
-        "9. Rectificador de Media Onda (R-L)"
+        "9. Rectificador de Media Onda (R-L)",
+        "10. Diodo de Marcha Libre (Freewheeling)"
     )
 )
 
@@ -581,3 +582,69 @@ elif tema == "9. Rectificador de Media Onda (R-L)":
     # --- Descarga de Datos ---
     datos_m9 = {'Fase [rad]': theta, 'V_fuente [V]': v_s, 'V_carga [V]': v_o, 'I_carga [A]': i_t}
     st.download_button("📥 Descargar Datos de Rectificación", preparar_descarga(datos_m9), "rectificador_media_onda.csv")
+
+# ==========================================
+# MÓDULO 10: DIODO DE MARCHA LIBRE
+# ==========================================
+elif tema == "10. Diodo de Marcha Libre (Freewheeling)":
+    st.header("Módulo 10: Rectificador con Diodo de Marcha Libre")
+    st.write("Efecto de la conmutación de corriente entre el diodo rectificador y el diodo de marcha libre.")
+
+    with st.sidebar:
+        st.subheader("Parámetros de Diseño")
+        Vm_10 = st.number_input("Voltaje Pico Fuente [V]", value=170.0, key="vm10")
+        f_10 = st.number_input("Frecuencia [Hz]", value=60.0, key="f10")
+        R_10 = st.number_input("Resistencia R [Ω]", value=10.0, key="r10")
+        L_10_mH = st.number_input("Inductancia L [mH]", value=50.0, key="l10")
+
+    # --- Cálculos ---
+    w10 = 2 * np.pi * f_10
+    L_10 = L_10_mH / 1000
+    tau_10 = L_10 / R_10
+    
+    theta = np.linspace(0, 2*np.pi, 1000)
+    v_s = Vm_10 * np.sin(theta)
+    
+    # Corriente en el primer intervalo (0 a pi): Diodo principal conduce
+    Z_10 = np.sqrt(R_10**2 + (w10*L_10)**2)
+    phi_10 = np.arctan2(w10*L_10, R_10)
+    
+    i_t = np.zeros_like(theta)
+    v_o = np.zeros_like(theta)
+    
+    # Simulación por intervalos
+    for i, th in enumerate(theta):
+        if th <= np.pi:
+            # Diodo principal conduce, Vo = Vs
+            v_o[i] = v_s[i]
+            i_t[i] = (Vm_10 / Z_10) * (np.sin(th - phi_10) + np.sin(phi_10) * np.exp(-th / (w10 * tau_10)))
+        else:
+            # Diodo de marcha libre conduce, Vo = 0
+            v_o[i] = 0
+            # Corriente decae exponencialmente desde el valor en pi
+            I_pi = (Vm_10 / Z_10) * (np.sin(np.pi - phi_10) + np.sin(phi_10) * np.exp(-np.pi / (w10 * tau_10)))
+            i_t[i] = I_pi * np.exp(-(th - np.pi) / (w10 * tau_10))
+
+    # --- Resultados ---
+    V_dc_10 = Vm_10 / np.pi
+    I_dc_10 = V_dc_10 / R_10
+    
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Voltaje CD (Teórico)", f"{V_dc_10:.2f} V")
+    c2.metric("Corriente CD (Promedio)", f"{I_dc_10:.2f} A")
+    c3.metric("Constante de Tiempo τ", f"{tau_10*1000:.2f} ms")
+
+    # --- Gráficas ---
+    fig11, (ax_v, ax_i) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+    
+    ax_v.plot(theta, v_s, 'gray', ls='--', alpha=0.4, label="v_fuente(t)")
+    ax_v.plot(theta, v_o, 'b', lw=2, label="v_output(t)")
+    ax_v.fill_between(theta, v_o, 0, color='blue', alpha=0.1)
+    ax_v.set_ylabel("Voltaje [V]"); ax_v.legend(); ax_v.grid(True)
+    
+    ax_i.plot(theta, i_t, 'r', lw=2, label="i_carga(t)")
+    ax_i.set_ylabel("Corriente [A]"); ax_i.set_xlabel("Fase [rad]"); ax_i.legend(); ax_i.grid(True)
+    
+    st.pyplot(fig11)
+
+    st.success(f"✅ **Conclusión Pedagógica:** Observe que el voltaje de salida ya no tiene la parte negativa del módulo anterior. La corriente es más suave (menos rizado) porque el inductor descarga su energía a través del diodo de marcha libre durante todo el semiciclo negativo.")
