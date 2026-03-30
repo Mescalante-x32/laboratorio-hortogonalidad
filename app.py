@@ -2471,7 +2471,7 @@ elif tema == "31. Control PI: Regulación de Corriente":
 
     with st.sidebar:
         st.subheader("Parámetros del Controlador PI")
-        Kp = st.slider("Ganancia Proporcional (Kp)", 0.01, 2.0, 0.1)
+        Kp = st.slider("Ganancia Proporcional (Kp)", 0.01, 20.0, 0.1)
         Ki = st.slider("Ganancia Integral (Ki)", 0.1, 50.0, 10.0)
         I_ref = st.number_input("Corriente Deseada (Iref) [A]", value=10.0)
         
