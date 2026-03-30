@@ -741,55 +741,49 @@ elif tema == "11. Efecto de Inductancia de Línea":
     st.info(f"👉 **Análisis:** Al considerar la carga como una fuente de corriente constante **Id**, el ángulo de conmutación **u** representa el tiempo que tarda la corriente de línea en subir desde 0 hasta el valor de la carga. Durante este tiempo (**{u_deg:.1f}°**), el voltaje en la carga es cero, lo que reduce el voltaje promedio final.")
 
 # =========================================================
-# MÓDULO 12 REFINADO: ONDA COMPLETA (ALTA RESOLUCIÓN)
+# MÓDULO 12: ONDA COMPLETA (INCLUYE ARRANQUE)
 # =========================================================
 elif tema == "12. Onda Completa con Filtro C y Ls":
-    st.header("Módulo 12: Rectificador de Onda Completa (Filtro C + Ls)")
-    st.write("Análisis detallado con resolución numérica mejorada para evitar inestabilidades.")
+    st.header("Módulo 12: Rectificador de Onda Completa (Transitorio de Arranque)")
+    st.write("Visualización de la corriente de irrupción (Inrush Current) y estabilización.")
 
     with st.sidebar:
         st.subheader("Parámetros del Circuito")
-        Vm_12 = st.number_input("Voltaje Pico Fuente [V]", value=170.0, key="vm12_r")
-        f_12 = st.number_input("Frecuencia [Hz]", value=60.0, key="f12_r")
-        Ls_mH_12 = st.slider("Inductancia de Línea Ls [mH]", 0.1, 10.0, 1.0, step=0.1, key="ls12_r")
-        C_uF_12 = st.number_input("Capacitor de Filtro [µF]", value=1000.0, step=100.0, key="c12_r")
-        R_12 = st.number_input("Resistencia de Carga [Ω]", value=50.0, min_value=1.0, key="r12_r")
+        Vm_12 = st.number_input("Voltaje Pico Fuente [V]", value=170.0, key="vm12_trans")
+        f_12 = st.number_input("Frecuencia [Hz]", value=60.0, key="f12_trans")
+        Ls_mH_12 = st.slider("Inductancia de Línea Ls [mH]", 0.1, 10.0, 1.0, step=0.1, key="ls12_trans")
+        C_uF_12 = st.number_input("Capacitor de Filtro [µF]", value=1000.0, step=100.0, key="c12_trans")
+        R_12 = st.number_input("Resistencia de Carga [Ω]", value=50.0, min_value=1.0, key="r12_trans")
 
-    # --- Configuración de Simulación de Alta Resolución ---
+    # --- Configuración de Simulación ---
     w = 2 * np.pi * f_12
     Ls = Ls_mH_12 / 1000
     C = C_uF_12 * 1e-6
     
-    # Aumentamos puntos para estabilidad numérica (paso de tiempo muy pequeño)
-    puntos = 5000
-    theta = np.linspace(0, 4*np.pi, puntos) 
+    # Simulación de 5 ciclos para ver el arranque y el estado estable
+    puntos = 6000
+    theta = np.linspace(0, 6*np.pi, puntos) 
     dt = (theta[1] - theta[0]) / w
     
     v_s_abs = np.abs(Vm_12 * np.sin(theta))
     v_c = np.zeros(puntos)
     i_s = np.zeros(puntos)
     
-    v_cap = 0.0
+    v_cap = 0.0 # Capacitor descargado (condición crítica de arranque)
     i_linea = 0.0
     
     for i in range(1, puntos):
-        # Ecuación de descarga (siempre ocurre a través de R)
         i_load = v_cap / R_12
         
-        # Lógica del Diodo
-        # Conduce si V_source > V_cap O si todavía hay corriente en Ls (extinción)
-        if v_s_abs[i] > v_cap or i_linea > 0:
-            # di/dt = (V_s - V_cap) / Ls
+        # Lógica de conducción real
+        if v_s_abs[i] > v_cap or i_linea > 1e-3:
             di = ((v_s_abs[i] - v_cap) / Ls) * dt
             i_linea += di
-            # i_linea no puede ser negativa (el diodo bloquea)
             if i_linea < 0: i_linea = 0
             
-            # dv/dt = (i_linea - i_load) / C
             dv = ((i_linea - i_load) / C) * dt
             v_cap += dv
         else:
-            # Solo descarga
             i_linea = 0
             dv = (-i_load / C) * dt
             v_cap += dv
@@ -797,26 +791,34 @@ elif tema == "12. Onda Completa con Filtro C y Ls":
         v_c[i] = v_cap
         i_s[i] = i_linea
 
-    # --- Resultados (Estado Estable) ---
-    zoom_idx = int(puntos * 0.75) # Tomamos el último ciclo
-    v_avg = np.mean(v_c[zoom_idx:])
-    v_ripple = np.max(v_c[zoom_idx:]) - np.min(v_c[zoom_idx:])
+    # --- Resultados ---
+    i_pico_arranque = np.max(i_s)
+    i_pico_estable = np.max(i_s[int(puntos*0.8):])
     
     c1, c2, c3 = st.columns(3)
-    c1.metric("Voltaje CD Promedio", f"{v_avg:.2f} V")
-    c2.metric("Voltaje de Rizado (ΔV)", f"{v_ripple:.2f} V")
-    c3.metric("I_pico Linea", f"{np.max(i_s):.2f} A")
+    c1.metric("Corriente de Arranque (I_peak)", f"{i_pico_arranque:.2f} A")
+    c2.metric("Corriente Estado Estable", f"{i_pico_estable:.2f} A")
+    c3.metric("Relación I_arr/I_est", f"{i_pico_arranque/i_pico_estable:.1f}x")
 
     # --- Gráficas ---
     fig13, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
-    plot_slice = slice(int(puntos/2), puntos) # Mostrar últimos 2 ciclos
     
-    ax1.plot(theta[plot_slice], v_s_abs[plot_slice], 'gray', ls='--', alpha=0.3, label="|v_fuente|")
-    ax1.plot(theta[plot_slice], v_c[plot_slice], 'b', lw=2, label="v_capacitor(t)")
+    # Voltaje: Se ve cómo sube desde cero
+    ax1.plot(theta, v_s_abs, 'gray', ls='--', alpha=0.2, label="|v_fuente|")
+    ax1.plot(theta, v_c, 'b', lw=2, label="v_capacitor(t)")
     ax1.set_ylabel("Voltaje [V]"); ax1.legend(); ax1.grid(True)
+    ax1.set_title("Transitorio de Carga del Capacitor")
     
-    ax2.plot(theta[plot_slice], i_s[plot_slice], 'r', lw=2, label="i_linea(t)")
-    ax2.fill_between(theta[plot_slice], i_s[plot_slice], 0, color='red', alpha=0.2)
+    # Corriente: El primer pulso es mucho más alto
+    ax2.plot(theta, i_s, 'r', lw=1.5, label="i_linea(t)")
+    ax2.fill_between(theta, i_s, 0, color='red', alpha=0.1)
     ax2.set_ylabel("Corriente [A]"); ax2.set_xlabel("Fase [rad]"); ax2.legend(); ax2.grid(True)
     
+    # Anotación para el alumno
+    ax2.annotate('Corriente de Irrupción', xy=(theta[np.argmax(i_s)], i_pico_arranque), 
+                 xytext=(theta[np.argmax(i_s)]+1, i_pico_arranque*0.8),
+                 arrowprops=dict(facecolor='black', shrink=0.05))
+    
     st.pyplot(fig13)
+
+    st.warning(f"⚠️ **Observación Crítica:** Note que el primer pulso de corriente es de **{i_pico_arranque:.2f} A**, mientras que en régimen permanente baja a **{i_pico_estable:.2f} A**. Esta diferencia es la razón por la cual se requieren termistores NTC o resistencias de pre-carga en fuentes de potencia reales.")
