@@ -35,7 +35,8 @@ tema = st.sidebar.radio(
         "21. Rectificador Trifásico (6 Pulsos)",
         "22. Calidad en Sistemas Trifásicos",
         "23. Rectificadores Multi-pulso",
-        "24. Autoevaluación: Sistemas Multi-pulso"
+        "24. Autoevaluación: Sistemas Multi-pulso",
+        "25. Traslape en Sistemas Trifásicos"
     )
 )
 
@@ -1940,3 +1941,78 @@ elif tema == "24. Autoevaluación: Sistemas Multi-pulso":
         st.markdown("---")
 
     st.info("💡 **Consejo Académico:** Utilice este módulo para que los alumnos verifiquen la relación entre el número de pulsos y la pureza de la corriente antes de pasar a los convertidores CD-CD.")
+
+# =========================================================
+# MÓDULO 25: TRASLAPE EN RECTIFICADORES TRIFÁSICOS (Ls)
+# =========================================================
+elif tema == "25. Traslape en Sistemas Trifásicos":
+    st.header("Módulo 23: Efecto de Ls y Ángulo de Traslape (μ)")
+    st.write("Análisis de la caída de tensión inductiva y muescas de conmutación en 6 pulsos.")
+
+    with st.sidebar:
+        st.subheader("Parámetros de Red y Carga")
+        Vll_rms = st.number_input("Voltaje Línea-Línea [Vrms]", value=220.0)
+        Ls_mH = st.number_input("Inductancia de Línea (Ls) [mH]", value=1.5, step=0.1)
+        alpha_deg = st.slider("Ángulo de Disparo (α) [°]", 0, 90, 20)
+        Idc_23 = st.number_input("Corriente de Carga Idc [A]", value=40.0)
+
+    # --- Cálculos del Fenómeno de Traslape ---
+    w = 2 * np.pi * 60
+    Ls = Ls_mH / 1000
+    alpha_rad = np.deg2rad(alpha_deg)
+    Vm_linea = Vll_rms * np.sqrt(2)
+    
+    # Ecuación de traslape trifásico: 
+    # cos(alpha + mu) = cos(alpha) - (sqrt(2) * w * Ls * Idc) / Vll_linea_pico
+    # Nota: Para 6 pulsos, la caída es (3 * w * Ls * Idc) / pi
+    cos_mu_val = np.cos(alpha_rad) - (np.sqrt(2) * w * Ls * Idc_23) / (Vll_rms * np.sqrt(2))
+    
+    if cos_mu_val < -1:
+        st.error("⚠️ Falla de conmutación: Ls o Idc excesivos para este ángulo alpha.")
+        mu_rad = 0.1 # Valor mínimo para evitar errores de dibujo
+    else:
+        mu_rad = np.arccos(cos_mu_val) - alpha_rad
+    
+    mu_deg = np.rad2deg(mu_rad)
+
+    # --- Generación de Formas de Onda ---
+    puntos = 2000
+    theta = np.linspace(0, 2 * np.pi, puntos)
+    vab = Vm_linea * np.sin(theta + np.pi/6)
+    vac = Vm_linea * np.sin(theta - np.pi/6)
+    # ... (Omitiendo el resto de las combinaciones por brevedad, simulamos el notch)
+    
+    v_out = np.zeros(puntos)
+    offset = np.pi/6
+    for i in range(puntos):
+        phi = (theta[i] - offset) % (np.pi/3) # Cada 60 grados
+        if phi < mu_rad:
+            # Durante el traslape, el voltaje es el promedio de dos voltajes de línea
+            # Simplificación pedagógica del notch:
+            v_out[i] = Vm_linea * np.cos(alpha_rad + phi/2) * np.cos(mu_rad/2) * 0.85 # Ajuste visual
+        else:
+            v_out[i] = Vm_linea * np.sin(phi + np.pi/3 + alpha_rad)
+
+    # --- Métricas ---
+    v_dc_ideal = (3 * Vm_linea / np.pi) * np.cos(alpha_rad)
+    caida_v = (3 * w * Ls * Idc_23) / np.pi
+    v_dc_real = v_dc_ideal - caida_v
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Ángulo μ (Traslape)", f"{mu_deg:.2f}°")
+    c2.metric("Vdc Real", f"{v_dc_real:.2f} V")
+    c3.metric("Caída ΔV_Ls", f"{caida_v:.2f} V")
+
+    # --- Gráfica de Voltaje de Salida ---
+    fig23, ax = plt.subplots(figsize=(10, 5))
+    ax.plot(theta/(2*np.pi), v_out, 'b', lw=2, label="v_out con Traslape")
+    ax.set_title(f"Voltaje de Salida con Muescas de Conmutación (α={alpha_deg}°, μ={mu_deg:.1f}°)")
+    ax.set_ylabel("Voltaje [V]"); ax.grid(True)
+    st.pyplot(fig23)
+
+    st.info(f"""
+    **Efecto de la Inductancia Ls en 3φ:**
+    1. **Muescas (Notches):** Observe cómo el voltaje no salta instantáneamente; hay una transición suave que reduce el área efectiva del voltaje CD.
+    2. **Caída de Tensión:** La caída de tensión NO es resistiva ($I^2R$), sino proporcional a la frecuencia y a la inductancia.
+    3. **Límite de Inversión:** En modo inversor ($\\alpha > 90^\circ$), el traslape es crítico, ya que si $\\alpha + \\mu > 180^\circ$, ocurre una **falla de conmutación** catastrófica.
+    """)
