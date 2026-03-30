@@ -28,7 +28,8 @@ tema = st.sidebar.radio(
         "14. Filtro Tipo Pi (C-L-C)",
         "15. Autoevaluación: Rectificadores",
         "16. Puente Controlado (Carga R y RL)",
-        "17. Puente Controlado (Carga R y RL)"
+        "17. Puente Controlado (Carga R y RL)",
+        "18. Bidireccionalidad de Potencia (Fuente I)"
     )
 )
 
@@ -1295,4 +1296,81 @@ elif tema == "17. Puente Controlado (Carga R y RL)":
     1. **Voltaje Negativo:** Observe que para $\\alpha = {alpha_deg}^\circ$, el voltaje $v_{{out}}$ tiene secciones negativas. Esto se debe a que la energía almacenada en el inductor mantiene el SCR en conducción.
     2. **Fórmula:** En régimen permanente y conducción continua: $V_{{dc}} = \\frac{{2 V_m}}{{\pi}} \cos \\alpha$.
     3. **Control:** Note que si $\\alpha > 90^\circ$, el voltaje promedio se vuelve negativo.
+    """)
+
+# =========================================================
+# MÓDULO 18: BIDIRECCIONALIDAD DE POTENCIA (CARGA I_dc)
+# =========================================================
+elif tema == "18. Bidireccionalidad de Potencia (Fuente I)":
+    st.header("Módulo 17: Operación en Dos Cuadrantes")
+    st.write("Exploración del flujo de potencia bidireccional (Rectificación e Inversión).")
+
+    with st.sidebar:
+        st.subheader("Control del Convertidor")
+        Vm_17 = st.number_input("Voltaje Pico Fuente CA [V]", value=170.0, key="v17")
+        alpha_deg = st.slider("Ángulo de Disparo (α) [°]", 0, 180, 45, key="alpha17")
+        
+        st.markdown("---")
+        st.subheader("Modelo de Carga Activa")
+        # Fuente de corriente ajustable que representa un motor o línea HVDC
+        Idc_val = st.number_input("Corriente de Carga Idc [A]", value=10.0, min_value=0.1)
+        num_ciclos = 2
+
+    # --- Cálculos de Potencia ---
+    alpha_rad = np.deg2rad(alpha_deg)
+    w = 2 * np.pi * 60
+    puntos = num_ciclos * 1000
+    theta = np.linspace(0, 2 * np.pi * num_ciclos, puntos)
+    
+    v_s = Vm_17 * np.sin(theta)
+    v_out = np.zeros(puntos)
+    p_inst = np.zeros(puntos) # Potencia instantánea
+    
+    for i in range(puntos):
+        phi = theta[i] % np.pi
+        if phi >= alpha_rad:
+            v_out[i] = np.abs(v_s[i])
+        else:
+            v_out[i] = -np.abs(v_s[i])
+        
+        # Potencia P = V_out * I_dc
+        p_inst[i] = v_out[i] * Idc_val
+
+    # --- Resultados ---
+    v_dc_avg = (2 * Vm_17 / np.pi) * np.cos(alpha_rad)
+    p_avg = v_dc_avg * Idc_val
+    
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Vdc Promedio", f"{v_dc_avg:.2f} V")
+    col2.metric("Potencia Media (P)", f"{p_avg:.2f} W")
+    
+    if p_avg >= 0:
+        col3.success("Modo: RECTIFICADOR")
+    else:
+        col3.warning("Modo: INVERSOR")
+
+    # --- Visualización ---
+    fig17, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 9), sharex=True)
+    x_eje = theta / (2 * np.pi)
+    
+    # Gráfica 1: Voltaje de Salida
+    ax1.plot(x_eje, v_s, 'gray', ls='--', alpha=0.3, label="v_fuente CA")
+    ax1.plot(x_eje, v_out, 'b', lw=2, label="v_salida (CD)")
+    ax1.fill_between(x_eje, v_out, 0, color='blue', alpha=0.1)
+    ax1.set_ylabel("Voltaje [V]"); ax1.legend(loc='upper right'); ax1.grid(True)
+    
+    # Gráfica 2: Potencia Instantánea
+    ax2.plot(x_eje, p_inst, 'purple', lw=2, label="Potencia p(t)")
+    ax2.axhline(0, color='black', lw=1)
+    ax2.fill_between(x_eje, p_inst, 0, where=(p_inst >= 0), color='green', alpha=0.2, label="Entrega a CD")
+    ax2.fill_between(x_eje, p_inst, 0, where=(p_inst < 0), color='red', alpha=0.2, label="Retorno a CA")
+    ax2.set_ylabel("Potencia [W]"); ax2.set_xlabel("Ciclos"); ax2.legend(loc='upper right'); ax2.grid(True)
+    
+    st.pyplot(fig17)
+
+    st.info(f"""
+    **Lección de Bidireccionalidad:**
+    * **α < 90°:** El voltaje promedio es positivo. La potencia fluye hacia la carga CD (Rectificación).
+    * **α = 90°:** El voltaje promedio es cero. La potencia neta transferida es nula.
+    * **α > 90°:** El voltaje promedio es negativo. Como la corriente $I_{{dc}}$ mantiene su dirección, la potencia es negativa, lo que significa que fluye de la fuente CD hacia la red CA (Inversión).
     """)
