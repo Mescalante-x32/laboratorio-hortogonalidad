@@ -724,3 +724,5 @@ elif tema == "11. Efecto de Inductancia de Línea":
     st.pyplot(fig12)
 
     st.info(f"💡 **Explicación para el Alumno:** Observe cómo el voltaje en la carga ($v_o$) no sube instantáneamente con la fuente. La diferencia ($v_s - v_o$) es el voltaje que 'absorbe' la inductancia de línea $L_s$ para permitir que la corriente crezca. Esto reduce el área total bajo la curva de voltaje de salida.")
+
+
