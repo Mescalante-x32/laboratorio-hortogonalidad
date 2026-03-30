@@ -2407,6 +2407,18 @@ elif tema == "31. Control PI: Regulación de Corriente":
     Kp_calc = L / tau_cl
     Ki_calc = Ra / tau_cl
 
+    # --- Dentro del Módulo 29 (después de los cálculos de Kp y Ki) ---
+
+    st.markdown("### 📐 Base Matemática del Diseño")
+    st.latex(r"C(s) = K_p + \frac{K_i}{s} \implies K_p = \frac{L_a}{\tau_{cl}}, \quad K_i = \frac{R_a}{\tau_{cl}}")
+    
+    with st.expander("Ver Función de Transferencia de Lazo Cerrado"):
+        st.latex(r"H(s) = \frac{I_a(s)}{I_{ref}(s)} = \frac{1}{\tau_{cl} s + 1}")
+        st.write(f"Con una $\\tau_{{cl}}$ de {tau_cl*1000:.1f} ms, el sistema alcanzará el 63.2% de la referencia en ese tiempo.")
+    
+    # --- Renderizado de la señal de control con Feed-forward ---
+    st.latex(r"V_{control}(s) = \underbrace{[K_p \cdot E(s) + \frac{K_i}{s} \cdot E(s)]}_{\text{Acción PI}} + \underbrace{E_{emf}}_{\text{Feed-forward}}")
+
     # --- Simulación ---
     fs = 10000; t_stop = 0.15
     t_vec = np.linspace(0, t_stop, int(t_stop * fs))
