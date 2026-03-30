@@ -25,7 +25,8 @@ tema = st.sidebar.radio(
         "11. Efecto de Inductancia de Línea",
         "12. Onda Completa con Filtro C y Ls",
         "13. Onda Completa con Filtro L-C",
-        "14. Filtro Tipo Pi (C-L-C)"
+        "14. Filtro Tipo Pi (C-L-C)",
+        "15. Autoevaluación: Rectificadores"
     )
 )
 
@@ -1021,3 +1022,82 @@ elif tema == "14. Filtro Tipo Pi (C-L-C)":
     st.pyplot(fig15)
 
     st.info("💡 **Nota didáctica:** Observe que el filtro Pi logra un rizado de voltaje extremadamente bajo, pero a costa de introducir pulsos de corriente muy altos en la entrada debido al capacitor C1.")
+
+# =========================================================
+# MÓDULO 15: AUTOEVALUACIÓN (QUIZ INTERACTIVO)
+# =========================================================
+elif tema == "15. Autoevaluación: Rectificadores":
+    st.header("Módulo 15: Autoevaluación de Conceptos")
+    st.write("""
+    Ponga a prueba sus conocimientos sobre el comportamiento de los rectificadores con diferentes tipos de filtro y efectos parásitos.
+    """)
+
+    # --- Estructura del Quiz ---
+    preguntas = [
+        {
+            "id": 1,
+            "pregunta": "¿Qué efecto tiene el aumento de la Inductancia de Línea (Ls) en un rectificador?",
+            "opciones": [
+                "Aumenta el voltaje promedio de salida.",
+                "Reduce el voltaje promedio debido al ángulo de conmutación (u).",
+                "No tiene efecto en el voltaje, solo en la corriente.",
+                "Elimina completamente el rizado de voltaje."
+            ],
+            "correcta": 1,
+            "explicacion": "La inductancia de línea impide el cambio instantáneo de corriente entre diodos, creando una caída de voltaje promedio (V_gamma)."
+        },
+        {
+            "id": 2,
+            "pregunta": "En un filtro capacitivo simple, si la resistencia de carga (R) disminuye (mayor carga), ¿qué sucede con el rizado?",
+            "opciones": [
+                "El rizado disminuye porque el capacitor se descarga más lento.",
+                "El rizado permanece igual.",
+                "El rizado aumenta porque la constante de tiempo RC disminuye.",
+                "El rizado desaparece."
+            ],
+            "correcta": 2,
+            "explicacion": "Al disminuir R, la corriente de carga aumenta y el capacitor se descarga más rápido entre pulsos, incrementando el rizado (delta V)."
+        },
+        {
+            "id": 3,
+            "pregunta": "¿Cuál es la principal ventaja de un filtro L-C respecto a un filtro C puramente capacitivo?",
+            "opciones": [
+                "Es más barato y ligero.",
+                "Produce picos de corriente de entrada más altos.",
+                "Mejora el factor de potencia al suavizar los pulsos de corriente de entrada.",
+                "Siempre entrega un voltaje mayor que el voltaje pico de entrada."
+            ],
+            "correcta": 2,
+            "explicacion": "El inductor de choque limita el di/dt de entrada, evitando los pulsos estrechos y altos típicos del filtro capacitivo."
+        },
+        {
+            "id": 4,
+            "pregunta": "En el Filtro Tipo Pi (C1-L-C2), ¿qué componente es el principal responsable de la corriente de irrupción (Inrush Current)?",
+            "opciones": [
+                "El inductor L.",
+                "El capacitor de entrada C1.",
+                "La resistencia de carga R.",
+                "El capacitor de salida C2."
+            ],
+            "correcta": 1,
+            "explicacion": "C1 está conectado directamente a la salida del puente; al estar descargado, demanda una corriente masiva en el primer semiciclo."
+        }
+    ]
+
+    # --- Lógica de Interfaz ---
+    if 'score' not in st.session_state:
+        st.session_state.score = 0
+    
+    for p in preguntas:
+        st.markdown(f"**{p['id']}. {p['pregunta']}**")
+        resp = st.radio(f"Seleccione una opción para la pregunta {p['id']}:", p['opciones'], key=f"q{p['id']}")
+        
+        if st.button(f"Verificar Pregunta {p['id']}", key=f"btn{p['id']}"):
+            idx_resp = p['opciones'].index(resp)
+            if idx_resp == p['correcta']:
+                st.success(f"¡Correcto! {p['explicacion']}")
+            else:
+                st.error(f"Incorrecto. {p['explicacion']}")
+        st.markdown("---")
+
+    st.info("💡 **Consejo:** Puede regresar a los módulos de simulación para cambiar los parámetros y observar estos fenómenos gráficamente antes de responder.")
