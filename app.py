@@ -926,67 +926,98 @@ elif tema == "13. Onda Completa con Filtro L-C":
         st.success(f"✅ **Conducción Continua:** El filtro opera correctamente por encima de la inductancia crítica.")
 
 # =========================================================
-# MÓDULO 14: RECTIFICADOR CON FILTRO TIPO PI (C-L-C)
+# MÓDULO 14: ONDA COMPLETA CON FILTRO TIPO PI (C-L-C)
 # =========================================================
 elif tema == "14. Filtro Tipo Pi (C-L-C)":
     st.header("Módulo 14: Rectificador con Filtro Tipo Pi ($\pi$)")
-    st.write("Configuración de alto desempeño: Capacitor - Inductor - Capacitor.")
+    st.write("Análisis de la topología C1 - L - C2 para filtrado de alto desempeño.")
 
     with st.sidebar:
-        st.subheader("Entrada CA")
-        Vm_14 = st.number_input("Voltaje Pico [V]", value=170.0)
+        st.subheader("Parámetros de Entrada")
+        Vm_14 = st.number_input("Voltaje Pico Fuente [V]", value=170.0, key="v14_p")
+        f_14 = st.number_input("Frecuencia [Hz]", value=60.0, key="f14_p")
+        num_ciclos_14 = st.slider("Ciclos a simular", 2, 15, 6, key="n14_p")
         
         st.markdown("---")
-        st.subheader("Componentes del Filtro")
-        C1_uF = st.number_input("C1 (Entrada) [µF]", value=470.0)
-        Lf_mH = st.number_input("L (Choque) [mH]", value=100.0)
-        C2_uF = st.number_input("C2 (Salida) [µF]", value=470.0)
-        R_14 = st.number_input("Carga R [Ω]", value=100.0)
-        num_ciclos = st.slider("Ciclos", 2, 15, 6)
+        st.subheader("Componentes del Filtro PI")
+        C1_uF = st.number_input("Capacitor C1 (Entrada) [µF]", value=470.0, step=50.0)
+        Lf_mH = st.number_input("Inductancia L (Choque) [mH]", value=50.0, step=5.0)
+        C2_uF = st.number_input("Capacitor C2 (Salida) [µF]", value=1000.0, step=100.0)
+        R_14 = st.number_input("Resistencia de Carga [Ω]", value=50.0)
 
-    # --- Simulación de Espacio de Estados ---
-    w = 2 * np.pi * 60
+    # --- Simulación Numérica (Espacio de Estados) ---
+    w = 2 * np.pi * f_14
     C1, Lf, C2 = C1_uF*1e-6, Lf_mH*1e-3, C2_uF*1e-6
-    puntos = num_ciclos * 2000
-    theta = np.linspace(0, 2*np.pi*num_ciclos, puntos)
-    dt = (theta[1]-theta[0])/w
+    puntos = num_ciclos_14 * 2000 
+    theta = np.linspace(0, 2 * np.pi * num_ciclos_14, puntos)
+    dt = (theta[1] - theta[0]) / w
     
-    v_s_abs = np.abs(Vm_14 * np.sin(theta))
-    v_c1, v_c2, i_l = np.zeros(puntos), np.zeros(puntos), np.zeros(puntos)
+    v_s = Vm_14 * np.sin(theta)
+    v_s_abs = np.abs(v_s)
+    
+    v_c1 = np.zeros(puntos); v_c2 = np.zeros(puntos)
+    i_l = np.zeros(puntos); i_in = np.zeros(puntos)
     
     vc1, vc2, il = 0.0, 0.0, 0.0
     
     for i in range(1, puntos):
-        # 1. Carga de C1 desde el puente
+        i_load = vc2 / R_14
+        
+        # 1. Carga de C1 desde el puente de diodos
         if v_s_abs[i] > vc1:
-            vc1 = v_s_abs[i] # Diodo ideal cargando C1
-        
-        # 2. Ecuaciones diferenciales del filtro L-C2
-        # dIl/dt = (Vc1 - Vc2) / L
-        # dVc2/dt = (Il - Vc2/R) / C2
-        # dVc1/dt = -Il / C1 (cuando el diodo no conduce)
-        
+            # Corriente que entra desde la red para cargar C1 y alimentar la etapa L-C2
+            i_cap1 = C1 * (v_s_abs[i] - vc1) / dt
+            i_in_val = i_cap1 + il
+            vc1 = v_s_abs[i]
+        else:
+            # Puente bloqueado: C1 se descarga hacia la etapa L-C2
+            dvc1 = (-il / C1) * dt
+            vc1 += dvc1
+            i_in_val = 0
+            
+        # 2. Dinámica del inductor Lf y capacitor C2
         dil = ((vc1 - vc2) / Lf) * dt
         il += dil
         if il < 0: il = 0
         
-        dvc2 = ((il - (vc2/R_14)) / C2) * dt
+        dvc2 = ((il - i_load) / C2) * dt
         vc2 += dvc2
         
-        if v_s_abs[i] <= vc1: # Si el puente no está cargando C1
-            dvc1 = (-il / C1) * dt
-            vc1 += dvc1
-            
         v_c1[i], v_c2[i], i_l[i] = vc1, vc2, il
+        i_in[i] = i_in_val if v_s[i] >= 0 else -i_in_val
 
-    # --- Métricas y Gráficas ---
-    st.metric("Rizado Final (ΔV)", f"{(np.max(v_c2[-500:]) - np.min(v_c2[-500:])):.4f} V")
+    # --- Métricas de Desempeño (Último Ciclo) ---
+    u_idx = int(puntos * (num_ciclos_14 - 1) / num_ciclos_14)
+    v_avg = np.mean(v_c2[u_idx:])
+    v_rip = np.max(v_c2[u_idx:]) - np.min(v_c2[u_idx:])
+    i_pico_in = np.max(np.abs(i_in))
 
-    fig15, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
-    ax1.plot(theta/(2*np.pi), v_c1, 'orange', label="V en C1 (Intermedio)", alpha=0.5)
-    ax1.plot(theta/(2*np.pi), v_c2, 'b', label="V en C2 (Salida)", lw=2)
-    ax1.set_ylabel("Voltaje [V]"); ax1.legend(); ax1.grid(True)
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Vdc Final", f"{v_avg:.2f} V")
+    c2.metric("Rizado ΔV", f"{v_rip:.4f} V")
+    c3.metric("I_pico Entrada", f"{i_pico_in:.2f} A")
+    c4.metric("Factor Rizado", f"{(v_rip/v_avg)*100:.3f} %")
+
+    # --- Gráficas ---
+    fig15, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(10, 11), sharex=True)
+    plt.subplots_adjust(hspace=0.3)
+    x_ciclos = theta / (2 * np.pi)
     
-    ax2.plot(theta/(2*np.pi), i_l, 'g', label="Corriente en L (Filtro)")
-    ax2.set_ylabel("Corriente [A]"); ax2.set_xlabel("Ciclos"); ax2.legend(); ax2.grid(True)
+    # Voltajes
+    ax1.plot(x_ciclos, v_s_abs, 'gray', ls='--', alpha=0.2, label="|v_fuente|")
+    ax1.plot(x_ciclos, v_c1, 'orange', alpha=0.6, label="v_C1 (Intermedio)")
+    ax1.plot(x_ciclos, v_c2, 'b', lw=2, label="v_C2 (Salida)")
+    ax1.set_ylabel("Voltaje [V]"); ax1.legend(loc='upper right'); ax1.grid(True)
+    
+    # Corrientes de Filtrado
+    ax2.plot(x_ciclos, i_l, 'g', lw=2, label="i_L (Inductor Filtro)")
+    ax2.set_ylabel("i_L [A]"); ax2.legend(loc='upper right'); ax2.grid(True)
+    
+    # Corriente de Línea (Entrada CA)
+    ax3.plot(x_ciclos, i_in, 'r', lw=1.5, label="i_entrada (Red CA)")
+    ax3.axhline(0, color='black', lw=1)
+    ax3.set_ylabel("i_in [A]"); ax3.set_xlabel("Ciclos"); ax3.legend(loc='upper right'); ax3.grid(True)
+    
     st.pyplot(fig15)
+
+    st.info("💡 **Nota didáctica:** Observe que el filtro Pi logra un rizado de voltaje extremadamente bajo, pero a costa de introducir pulsos de corriente muy altos en la entrada debido al capacitor C1.")
