@@ -2385,61 +2385,80 @@ elif tema == "29. Troceador Clase C: Tracción y Frenado":
     """)
 
 # =========================================================
-# MÓDULO 31: ROBUSTEZ DEL CONTROL PI
+# MÓDULO 31: CONTROL PI - DISEÑO, ROBUSTEZ Y SATURACIÓN
 # =========================================================
 elif tema == "31. Control PI: Regulación de Corriente":
-    st.header("Módulo 29: Análisis de Robustez en Lazo Cerrado")
+    st.header("Módulo 29: Sintonía y Robustez del Lazo de Corriente")
 
     with st.sidebar:
-        st.subheader("1. Parámetros de Diseño (Lo que cree el PI)")
-        tau_deseada = st.slider("tau_cl deseada [ms]", 1, 50, 5) / 1000
+        st.subheader("1. Diseño (Modelo Interno)")
+        tau_cl = st.slider("tau deseada [ms]", 1, 50, 5) / 1000
         L_nom = st.number_input("La Nominal [mH]", value=10.0) / 1000
         R_nom = st.number_input("Ra Nominal [Ω]", value=0.5)
         
         st.markdown("---")
-        st.subheader("2. Parámetros Reales (La Planta Física)")
-        # Aquí el alumno puede simular un motor que se calienta (sube R) 
-        # o que satura (baja L)
-        L_real = st.slider("La Real (% del nominal)", 50, 150, 100) / 100 * L_nom
-        R_real = st.slider("Ra Real (% del nominal)", 50, 200, 100) / 100 * R_nom
+        st.subheader("2. Planta Real (Variación Paramétrica)")
+        L_real = st.slider("La Real (% del nominal)", 50, 150, 100, key="lr") / 100 * L_nom
+        R_real = st.slider("Ra Real (% del nominal)", 50, 200, 100, key="rr") / 100 * R_nom
+        E_dist = st.slider("FEM de perturbación (E) [V]", 0, 150, 80)
 
-    # --- Cálculo de Ganancias (Basado en el Nominal) ---
-    Kp = L_nom / tau_deseada
-    Ki = R_nom / tau_deseada
+    # --- Cálculo de Ganancias (Cancelación Polo-Cero) ---
+    Kp = L_nom / tau_cl
+    Ki = R_nom / tau_cl
 
-    # --- Simulación ---
-    t_vec = np.linspace(0, 0.1, 5000); dt = t_vec[1] - t_vec[0]
-    i_act = 0.0; e_int = 0.0; h_i = []
-    I_ref = 10.0; V_dc = 200.0; E_emf = 50.0
+    # --- Simulación Dinámica ---
+    fs = 10000; t_stop = 0.1; dt = 1/fs
+    t_vec = np.linspace(0, t_stop, int(t_stop * fs))
+    
+    i_act = 0.0; e_int = 0.0; V_dc = 200.0; I_ref = 12.0
+    h_i = []; h_D = []
 
     for t in t_vec:
         error = I_ref - i_act
         e_int += error * dt
-        v_pi = Kp * error + Ki * e_int
-        v_control = v_pi + E_emf # Feed-forward
         
-        D = max(0, min(1, v_control / V_dc))
-        # La planta evoluciona con los parámetros REALES
-        di = (D * V_dc - R_real * i_act - E_emf) / L_real * dt
+        # Ley de control con Feed-forward
+        v_pi = Kp * error + Ki * e_int
+        v_total = v_pi + E_dist
+        
+        # Esfuerzo de Control (D) con Saturación
+        D = max(0.0, min(1.0, v_total / V_dc))
+        
+        # Evolución con parámetros REALES
+        di = (D * V_dc - R_real * i_act - E_dist) / L_real * dt
         i_act += di
+        
         h_i.append(i_act)
+        h_D.append(D)
 
-    # --- Función de Transferencia con Error Paramétrico ---
-    st.markdown("### 📉 Efecto del Desajuste (Mismatch)")
-    st.latex(r"C(s) = \frac{L_{nom} s + R_{nom}}{\tau_{cl} s}, \quad G_p(s) = \frac{1}{L_{real} s + R_{real}}")
-    
-    fig_rob, ax_rob = plt.subplots(figsize=(10, 4))
-    ax_rob.plot(t_vec*1000, h_i, 'g', lw=2, label="Respuesta Real")
-    ax_rob.axhline(I_ref, color='r', ls='--', label="Referencia")
-    ax_rob.set_title(f"Respuesta con L_real={L_real*1000:.1f}mH y R_real={R_real:.2f}Ω")
-    ax_rob.set_xlabel("Tiempo [ms]"); ax_rob.set_ylabel("Corriente [A]"); ax_rob.legend(); ax_rob.grid(True)
-    st.pyplot(fig_rob)
+    # --- Visualización de Datos de Diseño ---
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Kp (Ganancia P)", f"{Kp:.4f}")
+    c2.metric("Ki (Ganancia I)", f"{Ki:.2f}")
+    c3.metric("I_ref", f"{I_ref} A")
 
-    # --- Diagnóstico Pedagógico ---
-    if L_real > L_nom:
-        st.warning("⚠️ **Sistema Lento:** La inductancia real es mayor a la esperada. El sistema no alcanzará la tau deseada.")
-    elif L_real < L_nom:
-        st.error("⚠️ **Sobretiro (Overshoot):** Al ser $L_{real} < L_{nom}$, el sistema es más rápido de lo calculado y puede oscilar.")
+    st.latex(r"C(s) = \frac{" + f"{Kp:.4f}" + r" s + " + f"{Ki:.2f}" + r"}{s}")
+
+    # --- Gráficas de Desempeño ---
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
     
-    if R_real != R_nom:
-        st.info("ℹ️ **Error de Cancelación:** El cero del PI ya no anula el polo del motor. Se observa una respuesta de 'doble pendiente'.")
+    # Grafica 1: Respuesta Temporal
+    ax1.plot(t_vec*1000, h_i, 'g', lw=2, label="Corriente Real (Ia)")
+    ax1.axhline(I_ref, color='r', ls='--', alpha=0.6, label="Referencia")
+    ax1.set_ylabel("Corriente [A]"); ax1.grid(True, alpha=0.3); ax1.legend()
+    ax1.set_title(f"Respuesta del Lazo: $\\tau_{{real}} \\approx$ {(L_real/Kp)*1000 if Kp>0 else 0:.2f} ms")
+
+    # Grafica 2: Esfuerzo de Control (D)
+    ax2.step(t_vec*1000, h_D, 'b', lw=1.5, label="Ciclo de Trabajo (D)")
+    ax2.set_ylabel("Esfuerzo D [0-1]"); ax2.set_xlabel("Tiempo [ms]")
+    ax2.set_ylim(-0.05, 1.05); ax2.grid(True, alpha=0.3); ax2.legend()
+    
+    st.pyplot(fig)
+
+    # --- Nota sobre Robustez ---
+    if abs(L_real - L_nom) > 1e-5 or abs(R_real - R_nom) > 1e-5:
+        st.warning(f"""
+        **Análisis de Mismatch:** El controlador PI está diseñado para $L={L_nom*1000:.1f}mH$ y $R={R_nom:.1f}\Omega$, 
+        pero la planta real tiene $L={L_real*1000:.1f}mH$ y $R={R_real:.1f}\Omega$. 
+        Observe cómo cambia el tiempo de asentamiento o si aparece un ligero sobretiro.
+        """)
